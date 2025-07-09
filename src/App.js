@@ -303,15 +303,22 @@ export default function App() {
     setError('');
   };
 
-  const handleSaveSession = () => {
-    const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'lucky-draw-session.json';
-    a.click();
-    URL.revokeObjectURL(url);
+ const handleSaveSession = () => {
+  const appState = { 
+    initialTickets, remainingTickets, winnersHistory,
+    numPrizes, drawOrder, inputValue, maxDigits, theme, logo,
+    title, subtitle, titleLineSpacing, subtitleLineSpacing, winnersPerPrize,
+    backgroundImage
   };
+  
+  const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'lucky-draw-session.json';
+  a.click();
+  URL.revokeObjectURL(url);
+};
   
   const handleLoadSession = (e) => {
     const file = e.target.files[0];
