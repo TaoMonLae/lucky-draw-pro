@@ -121,7 +121,7 @@ export default function App() {
   const [remainingTickets, setRemainingTickets] = useState(Array.from({ length: 50 }, (_, i) => String(i + 1).padStart(2, '0')));
   const [inputValue, setInputValue] = useState("1-50");
   const [displayDigits, setDisplayDigits] = useState(getDigits("01"));
-  const [error, setError] = useState('');
+  const [, setError] = useState('');
   const [numPrizes, setNumPrizes] = useState(3);
   const [winnersPerPrize, setWinnersPerPrize] = useState(1);
   const [drawOrder, setDrawOrder] = useState('desc');
@@ -315,21 +315,6 @@ export default function App() {
     a.download = 'lucky-draw-session.json';
     a.click();
     URL.revokeObjectURL(url);
-  };
-  
-  const handleLoadSession = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        try {
-            restoreSession(JSON.parse(event.target.result));
-        } catch (err) {
-            setError('Invalid session file.');
-        }
-    };
-    reader.readAsText(file);
-    e.target.value = null;
   };
   
   const handleFileImport = (e) => {
