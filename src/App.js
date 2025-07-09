@@ -500,7 +500,6 @@ export default function App() {
                 link.click();
             } catch (err) {
                 console.error('Failed to export image', err);
-                setError('Could not export image.');
             } finally {
                 setWinnerToExport(null);
             }
@@ -523,7 +522,6 @@ export default function App() {
                 link.click();
             } catch (err) {
                 console.error('Failed to export all winners image', err);
-                setError('Could not export all winners.');
             } finally {
                 setExportAllTrigger(false);
             }
