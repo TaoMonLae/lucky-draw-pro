@@ -157,7 +157,6 @@ export default function App() {
   const fireworkCrackle = useRef(null);
 
   // --- SESSION MANAGEMENT ---
-  // This useEffect now has a stable dependency array, fixing the build error.
   useEffect(() => {
     const appState = {
         initialTickets, remainingTickets, winnersHistory,
@@ -176,7 +175,6 @@ export default function App() {
     subtitleLineSpacing, winnersPerPrize, backgroundImage
   ]);
 
-  // Check for auto-saved session on initial load
   useEffect(() => {
     try {
         const savedSession = localStorage.getItem('lucky-draw-autosave');
@@ -205,7 +203,7 @@ export default function App() {
     setLogo(data.logo || null);
     setBackgroundImage(data.backgroundImage || '');
     setDisplayDigits(String(data.remainingTickets[0] || data.initialTickets[0] || '1').padStart(data.maxDigits, '0').split(''));
-    setSessionToRestore(null); // Hide prompt after restoring
+    setSessionToRestore(null);
   };
 
   // Script and Audio Setup
@@ -304,6 +302,12 @@ export default function App() {
   };
 
   const handleSaveSession = () => {
+    const appState = {
+        initialTickets, remainingTickets, winnersHistory,
+        numPrizes, drawOrder, inputValue, maxDigits, theme, logo,
+        title, subtitle, titleLineSpacing, subtitleLineSpacing, winnersPerPrize,
+        backgroundImage
+    };
     const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -481,7 +485,6 @@ export default function App() {
     animationLoop();
   };
 
-  // This useEffect now has a stable dependency array, fixing the build error.
   useEffect(() => {
     if (winnerToExport && exportRef.current && window.htmlToImage) {
         const exportImage = async () => {
@@ -506,7 +509,6 @@ export default function App() {
     }
   }, [winnerToExport]);
 
-  // This useEffect now has a stable dependency array, fixing the build error.
   useEffect(() => {
     if (exportAllTrigger && exportAllRef.current && window.htmlToImage) {
         const exportAllImage = async () => {
