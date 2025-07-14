@@ -388,7 +388,7 @@ export default function App() {
  //       } catch (err) {
  //           setError('Invalid or corrupted session file.');
   ///          setTimeout(() => setError(''), 3000);
-   /     }
+   //     }
   //  };
  //   reader.readAsText(file);
 //    e.target.value = null;
