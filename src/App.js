@@ -70,6 +70,16 @@ const themes = {
   },
 };
 
+const fonts = {
+    'Sans Serif': 'sans-serif',
+    'Serif': 'serif',
+    'Monospace': 'monospace',
+    'Montserrat': 'Montserrat',
+    'Playfair Display': 'Playfair Display',
+    'Roboto': 'Roboto',
+    'Lobster': 'Lobster',
+};
+
 // --- Helper Components ---
 
 const Button = ({ children, className, ...props }) => (
@@ -117,15 +127,20 @@ export default function App() {
   const [winnersHistory, setWinnersHistory] = useState([]);
   const [showConfetti, setShowConfetti] = useState(false);
   const [currentPrize, setCurrentPrize] = useState('');
-  const [initialTickets, setInitialTickets] = useState(Array.from({ length: 50 }, (_, i) => String(i + 1).padStart(2, '0')));
-  const [remainingTickets, setRemainingTickets] = useState(Array.from({ length: 50 }, (_, i) => String(i + 1).padStart(2, '0')));
+  const [initialEntries, setInitialEntries] = useState(Array.from({ length: 50 }, (_, i) => String(i + 1).padStart(2, '0')));
+  const [remainingEntries, setRemainingEntries] = useState(Array.from({ length: 50 }, (_, i) => String(i + 1).padStart(2, '0')));
   const [inputValue, setInputValue] = useState("1-50");
-  const [displayDigits, setDisplayDigits] = useState(getDigits("01"));
-  const [, setError] = useState('');
-  const [numPrizes, setNumPrizes] = useState(3);
+  const [displayValue, setDisplayValue] = useState("01");
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [prizes, setPrizes] = useState([
+    { id: 1, name: '3rd Prize' },
+    { id: 2, name: '2nd Prize' },
+    { id: 3, name: '1st Prize' },
+  ]);
   const [winnersPerPrize, setWinnersPerPrize] = useState(1);
-  const [drawOrder, setDrawOrder] = useState('desc');
-  const [scriptsLoaded, setScriptsLoaded] = useState({ htmlToImage: false, tone: false });
+  const [drawMode, setDrawMode] = useState('numbers');
+  const [scriptsLoaded, setScriptsLoaded] = useState({ htmlToImage: false, tone: false, qrcode: false });
   const [pulse, setPulse] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [winnerToExport, setWinnerToExport] = useState(null);
@@ -134,14 +149,25 @@ export default function App() {
   const [subtitle, setSubtitle] = useState('The most exciting draw on the web!');
   const [titleLineSpacing, setTitleLineSpacing] = useState(1.2);
   const [subtitleLineSpacing, setSubtitleLineSpacing] = useState(1.5);
+  const [titleFontSize, setTitleFontSize] = useState(48);
+  const [subtitleFontSize, setSubtitleFontSize] = useState(16);
+  const [titleColor, setTitleColor] = useState('');
+  const [subtitleColor, setSubtitleColor] = useState('');
+  const [titleFont, setTitleFont] = useState('sans-serif');
+  const [subtitleFont, setSubtitleFont] = useState('sans-serif');
   const [theme, setTheme] = useState('Event Night');
   const [logo, setLogo] = useState(null);
   const [backgroundImage, setBackgroundImage] = useState('');
   const [settingsTab, setSettingsTab] = useState('main');
-  const [sessionToRestore, setSessionToRestore] = useState(null);
+  const [charge, setCharge] = useState(0);
+  const [isCharging, setIsCharging] = useState(false);
+  const [masterVolume, setMasterVolume] = useState(0);
+  const [sfxVolume, setSfxVolume] = useState(-6);
+  const [musicVolume, setMusicVolume] = useState(0);
 
   // Refs
   const timeoutRef = useRef(null);
+  const chargeIntervalRef = useRef(null);
   const displayRef = useRef(null);
   const fileInputRef = useRef(null);
   const sessionInputRef = useRef(null);
@@ -151,18 +177,24 @@ export default function App() {
   const exportAllRef = useRef(null);
   const audioStarted = useRef(false);
   const almostTriggered = useRef(false);
+  const sfxVolumeNode = useRef(null);
+  const musicVolumeNode = useRef(null);
   const tickSynth = useRef(null);
   const winSynth = useRef(null);
   const fireworkWhoosh = useRef(null);
   const fireworkCrackle = useRef(null);
+  const drumrollSynth = useRef(null);
+  const applauseSynth = useRef(null);
 
   // --- SESSION MANAGEMENT ---
   useEffect(() => {
     const appState = {
-        initialTickets, remainingTickets, winnersHistory,
-        numPrizes, drawOrder, inputValue, maxDigits, theme, logo,
-        title, subtitle, titleLineSpacing, subtitleLineSpacing, winnersPerPrize,
-        backgroundImage
+        initialEntries, remainingEntries, winnersHistory,
+        prizes, winnersPerPrize, inputValue, maxDigits, theme, logo,
+        title, subtitle, titleLineSpacing, subtitleLineSpacing,
+        backgroundImage, masterVolume, sfxVolume, musicVolume,
+        titleColor, subtitleColor, titleFont, subtitleFont,
+        titleFontSize, subtitleFontSize, drawMode
     };
     try {
         localStorage.setItem('lucky-draw-autosave', JSON.stringify(appState));
@@ -170,40 +202,51 @@ export default function App() {
         console.error("Failed to save session to localStorage", e);
     }
   }, [
-    initialTickets, remainingTickets, winnersHistory, numPrizes, drawOrder, 
+    initialEntries, remainingEntries, winnersHistory, prizes,
     inputValue, maxDigits, theme, logo, title, subtitle, titleLineSpacing, 
-    subtitleLineSpacing, winnersPerPrize, backgroundImage
+    subtitleLineSpacing, winnersPerPrize, backgroundImage, masterVolume, 
+    sfxVolume, musicVolume, titleColor, subtitleColor, titleFont, subtitleFont,
+    titleFontSize, subtitleFontSize, drawMode
   ]);
 
-  useEffect(() => {
-    try {
-        const savedSession = localStorage.getItem('lucky-draw-autosave');
-        if (savedSession) {
-            setSessionToRestore(JSON.parse(savedSession));
-        }
-    } catch (e) {
-        console.error("Failed to load session from localStorage", e);
-    }
-  }, []);
-
   const restoreSession = (data) => {
-    setInitialTickets(data.initialTickets);
-    setRemainingTickets(data.remainingTickets);
-    setWinnersHistory(data.winnersHistory);
-    setNumPrizes(data.numPrizes);
-    setDrawOrder(data.drawOrder);
-    setInputValue(data.inputValue);
-    setMaxDigits(data.maxDigits);
-    setTitle(data.title || 'Live Lucky Draw');
-    setSubtitle(data.subtitle || 'The most exciting draw on the web!');
-    setTitleLineSpacing(data.titleLineSpacing || 1.2);
-    setSubtitleLineSpacing(data.subtitleLineSpacing || 1.5);
-    setWinnersPerPrize(data.winnersPerPrize || 1);
-    setTheme(data.theme || 'Event Night');
-    setLogo(data.logo || null);
-    setBackgroundImage(data.backgroundImage || '');
-    setDisplayDigits(String(data.remainingTickets[0] || data.initialTickets[0] || '1').padStart(data.maxDigits, '0').split(''));
-    setSessionToRestore(null);
+    try {
+        if (!data || typeof data !== 'object' || !Array.isArray(data.initialEntries)) {
+            throw new Error("Invalid session data structure.");
+        }
+        setInitialEntries(data.initialEntries || []);
+        setRemainingEntries(data.remainingEntries || []);
+        setWinnersHistory(data.winnersHistory || []);
+        setPrizes(data.prizes || [{ id: 1, name: '3rd Prize' }, { id: 2, name: '2nd Prize' }, { id: 3, name: '1st Prize' }]);
+        setInputValue(data.inputValue || '1-50');
+        const restoredMaxDigits = data.maxDigits || 2;
+        setMaxDigits(restoredMaxDigits);
+        setTitle(data.title || 'Live Lucky Draw');
+        setSubtitle(data.subtitle || 'The most exciting draw on the web!');
+        setTitleLineSpacing(data.titleLineSpacing || 1.2);
+        setSubtitleLineSpacing(data.subtitleLineSpacing || 1.5);
+        setTitleFontSize(data.titleFontSize || 48);
+        setSubtitleFontSize(data.subtitleFontSize || 16);
+        setWinnersPerPrize(data.winnersPerPrize || 1);
+        setTheme(data.theme || 'Event Night');
+        setLogo(data.logo || null);
+        setBackgroundImage(data.backgroundImage || '');
+        setMasterVolume(data.masterVolume ?? 0);
+        setSfxVolume(data.sfxVolume ?? -6);
+        setMusicVolume(data.musicVolume ?? 0);
+        setTitleColor(data.titleColor || '');
+        setSubtitleColor(data.subtitleColor || '');
+        setTitleFont(data.titleFont || 'sans-serif');
+        setSubtitleFont(data.subtitleFont || 'sans-serif');
+        setDrawMode(data.drawMode || 'numbers');
+        const firstEntry = (data.remainingEntries && data.remainingEntries[0]) || (data.initialEntries && data.initialEntries[0]) || '1';
+        setDisplayValue(firstEntry);
+        setSuccessMessage('Session restored successfully!');
+        setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+        setError('Invalid or corrupted session file.');
+        setTimeout(() => setError(''), 3000);
+    }
   };
 
   // Script and Audio Setup
@@ -212,7 +255,7 @@ export default function App() {
         const script = document.createElement('script');
         script.src = src;
         script.onload = onDone;
-        script.onerror = () => console.error(`Failed to load script: ${src}`);
+        script.onerror = () => setError(`Failed to load script: ${src}`);
         document.head.appendChild(script);
         return () => document.head.removeChild(script);
     };
@@ -222,72 +265,88 @@ export default function App() {
 
   useEffect(() => {
     if (scriptsLoaded.tone && !tickSynth.current) {
-        tickSynth.current = new window.Tone.MembraneSynth().toDestination();
-        winSynth.current = new window.Tone.PolySynth(window.Tone.Synth).toDestination();
-        fireworkWhoosh.current = new window.Tone.NoiseSynth({
-            noise: { type: 'white' },
-            envelope: { attack: 0.005, decay: 0.3, sustain: 0 }
-        }).toDestination();
-        fireworkCrackle.current = new window.Tone.MetalSynth({
-            frequency: 200, envelope: { attack: 0.001, decay: 0.1, release: 0.01 },
-            harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5
-        }).toDestination();
+        sfxVolumeNode.current = new window.Tone.Volume(sfxVolume).toDestination();
+        musicVolumeNode.current = new window.Tone.Volume(musicVolume).toDestination();
+        
+        tickSynth.current = new window.Tone.MembraneSynth().connect(sfxVolumeNode.current);
+        fireworkWhoosh.current = new window.Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.005, decay: 0.3, sustain: 0 } }).connect(sfxVolumeNode.current);
+        fireworkCrackle.current = new window.Tone.MetalSynth({ frequency: 200, envelope: { attack: 0.001, decay: 0.1, release: 0.01 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(sfxVolumeNode.current);
+        drumrollSynth.current = new window.Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(sfxVolumeNode.current);
+        
+        winSynth.current = new window.Tone.PolySynth(window.Tone.Synth).connect(musicVolumeNode.current);
+        applauseSynth.current = new window.Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0 }}).connect(sfxVolumeNode.current);
     }
-  }, [scriptsLoaded.tone]);
+  }, [scriptsLoaded.tone, sfxVolume, musicVolume]);
+
+  useEffect(() => {
+    if(window.Tone) {
+        window.Tone.Destination.volume.value = masterVolume;
+    }
+  }, [masterVolume]);
+
+  useEffect(() => {
+    if(sfxVolumeNode.current) sfxVolumeNode.current.volume.value = sfxVolume;
+  }, [sfxVolume]);
+
+  useEffect(() => {
+    if(musicVolumeNode.current) musicVolumeNode.current.volume.value = musicVolume;
+  }, [musicVolume]);
 
   // Logic Functions
   const getPrizeName = () => {
-    const prizeNumber = drawOrder === 'asc'
-        ? winnersHistory.length + 1
-        : numPrizes - winnersHistory.length;
-    if (prizeNumber <= 0) return "Bonus Prize";
-    const i = prizeNumber;
-    const j = i % 10, k = i % 100;
-    if (j === 1 && k !== 11) return `${i}st Prize`;
-    if (j === 2 && k !== 12) return `${i}nd Prize`;
-    if (j === 3 && k !== 13) return `${i}rd Prize`;
-    return `${i}th Prize`;
+    if (winnersHistory.length >= prizes.length) return "All prizes drawn!";
+    return prizes[winnersHistory.length].name;
   };
 
-  const processTickets = (tickets) => {
-    if (tickets.length > 0) {
-        const maxLength = tickets.reduce((max, ticket) => Math.max(max, ticket.length), 0);
-        setMaxDigits(maxLength);
-        const paddedTickets = tickets.map(t => t.padStart(maxLength, '0'));
-        setInitialTickets(paddedTickets);
-        resetDraw(paddedTickets, maxLength);
+  const processEntries = (entries) => {
+    if (entries.length > 0) {
+        if (drawMode === 'numbers') {
+            const maxLength = entries.reduce((max, entry) => Math.max(max, entry.length), 0);
+            setMaxDigits(maxLength);
+            const paddedEntries = entries.map(t => t.padStart(maxLength, '0'));
+            setInitialEntries(paddedEntries);
+            resetDraw(paddedEntries, maxLength);
+        } else {
+            setInitialEntries(entries);
+            resetDraw(entries);
+        }
     }
   };
 
-  const updateTickets = () => {
+  const updateEntries = () => {
     setError('');
-    const input = inputValue.trim();
-    let newTickets = [];
-    if (input.includes('-') && !input.includes(',')) {
-        const parts = input.split('-').map(p => p.trim());
-        if (parts.length !== 2) { setError('Invalid range format. Please use "start-end".'); return; }
-        const startStr = parts[0];
-        const endStr = parts[1];
-        const startNum = parseInt(startStr, 10);
-        const endNum = parseInt(endStr, 10);
-        if (isNaN(startNum) || isNaN(endNum) || startNum >= endNum) { setError('Invalid range. Start must be less than end.'); return; }
-        const padding = startStr.length;
-        if (padding > 10) { setError('Ticket numbers cannot exceed 10 digits.'); return; }
-        if (endNum - startNum + 1 > 40000) { setError('Range is too large. Please use a range of 40,000 tickets or less.'); return; }
-        newTickets = Array.from({ length: endNum - startNum + 1 }, (_, i) => String(startNum + i).padStart(padding, '0'));
-    } else if (input.includes(',')) {
-        const customTickets = Array.from(new Set(input.split(',').map(s => s.trim()).filter(s => s.length > 0)));
-        if (customTickets.length < 1) { setError('Please provide at least one valid, unique, comma-separated ticket number.'); return; }
-        if (customTickets.length > 40000) { setError('Too many tickets. Please provide 40,000 tickets or less.'); return; }
-        newTickets = customTickets;
-    } else { setError('Invalid format. Use a range (e.g., 1-100) or a comma-separated list.'); return; }
-    processTickets(newTickets);
+    let newEntries = [];
+    if (drawMode === 'numbers') {
+        const input = inputValue.trim();
+        if (input.includes('-') && !input.includes(',')) {
+            const parts = input.split('-').map(p => p.trim());
+            if (parts.length !== 2) { setError('Invalid range format. Please use "start-end".'); return; }
+            const startStr = parts[0];
+            const endStr = parts[1];
+            const startNum = parseInt(startStr, 10);
+            const endNum = parseInt(endStr, 10);
+            if (isNaN(startNum) || isNaN(endNum) || startNum >= endNum) { setError('Invalid range. Start must be less than end.'); return; }
+            const padding = startStr.length;
+            if (padding > 10) { setError('Ticket numbers cannot exceed 10 digits.'); return; }
+            if (endNum - startNum + 1 > 40000) { setError('Range is too large. Please use a range of 40,000 tickets or less.'); return; }
+            newEntries = Array.from({ length: endNum - startNum + 1 }, (_, i) => String(startNum + i).padStart(padding, '0'));
+        } else {
+            newEntries = Array.from(new Set(inputValue.split(',').map(s => s.trim()).filter(s => s.length > 0)));
+        }
+    } else { // Names mode
+        newEntries = Array.from(new Set(inputValue.split(',').map(s => s.trim()).filter(s => s.length > 0)));
+    }
+    
+    if (newEntries.length < 1) { setError('Please provide at least one valid entry.'); return; }
+    if (newEntries.length > 40000) { setError('Too many entries. Please provide 40,000 or less.'); return; }
+    processEntries(newEntries);
   };
 
-  const resetDraw = (ticketsToUse = initialTickets, newMaxDigits = maxDigits) => {
-    setRemainingTickets(ticketsToUse);
+  const resetDraw = (entriesToUse = initialEntries, newMaxDigits = maxDigits) => {
+    setRemainingEntries(entriesToUse);
     setWinnersHistory([]);
-    setDisplayDigits(String(ticketsToUse[0] || '1').padStart(newMaxDigits, '0').split(''));
+    const firstEntry = entriesToUse[0] || (drawMode === 'numbers' ? '1' : 'Winner');
+    setDisplayValue(firstEntry);
     setError('');
     setShowConfetti(false);
   };
@@ -296,17 +355,19 @@ export default function App() {
     if (winnersHistory.length === 0 || drawing) return;
     const lastWinnerGroup = winnersHistory[winnersHistory.length - 1];
     setWinnersHistory(winnersHistory.slice(0, -1));
-    setRemainingTickets([...remainingTickets, ...lastWinnerGroup.tickets].sort());
-    setDisplayDigits(getDigits(lastWinnerGroup.tickets[0]));
+    setRemainingEntries([...remainingEntries, ...lastWinnerGroup.tickets].sort());
+    setDisplayValue(lastWinnerGroup.tickets[0]);
     setError('');
   };
 
   const handleSaveSession = () => {
     const appState = {
-        initialTickets, remainingTickets, winnersHistory,
-        numPrizes, drawOrder, inputValue, maxDigits, theme, logo,
-        title, subtitle, titleLineSpacing, subtitleLineSpacing, winnersPerPrize,
-        backgroundImage
+        initialEntries, remainingEntries, winnersHistory,
+        prizes, winnersPerPrize, inputValue, maxDigits, theme, logo,
+        title, subtitle, titleLineSpacing, subtitleLineSpacing,
+        titleFontSize, subtitleFontSize,
+        backgroundImage, masterVolume, sfxVolume, musicVolume,
+        titleColor, subtitleColor, titleFont, subtitleFont, drawMode
     };
     const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -317,14 +378,30 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
   
+  const handleLoadSession = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            restoreSession(JSON.parse(event.target.result));
+        } catch (err) {
+            setError('Invalid or corrupted session file.');
+            setTimeout(() => setError(''), 3000);
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = null;
+  };
+  
   const handleFileImport = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-        const tickets = event.target.result.split('\n').map(t => t.trim()).filter(Boolean);
-        setInputValue(tickets.join(', '));
-        processTickets(tickets);
+        const entries = event.target.result.split('\n').map(t => t.trim()).filter(Boolean);
+        setInputValue(entries.join(', '));
+        processEntries(entries);
     };
     reader.readAsText(file);
     e.target.value = null;
@@ -351,123 +428,200 @@ export default function App() {
         reader.readAsDataURL(file);
     }
   };
-
-  const drawNextWinner = async () => {
-    const numToDraw = Math.min(winnersPerPrize, remainingTickets.length);
-    if (drawing || numToDraw === 0 || winnersHistory.length >= numPrizes) {
-        if (remainingTickets.length === 0) setError('All tickets have been drawn!');
-        if (winnersHistory.length >= numPrizes) setError('All prizes have been awarded!');
-        return;
+  
+  const playDrumroll = () => {
+    if (drumrollSynth.current) {
+        const now = window.Tone.now();
+        drumrollSynth.current.triggerAttack("C2", now);
+        drumrollSynth.current.triggerAttack("C2", now + 0.05);
+        drumrollSynth.current.triggerAttack("G1", now + 0.1);
+        drumrollSynth.current.triggerAttack("C2", now + 0.15);
+        drumrollSynth.current.triggerAttack("G1", now + 0.2);
     }
+  };
 
+  const playApplause = () => {
+    if (applauseSynth.current) {
+        for (let i = 0; i < 20; i++) {
+            applauseSynth.current.triggerAttackRelease('8n', `+${i * 0.03}`);
+        }
+    }
+  };
+
+  const startCharging = async () => {
+    if (drawing || remainingEntries.length === 0 || winnersHistory.length >= prizes.length) return;
+    
     if (scriptsLoaded.tone && !audioStarted.current) {
         await window.Tone.start();
         audioStarted.current = true;
+    }
+
+    setIsCharging(true);
+    chargeIntervalRef.current = setInterval(() => {
+        setCharge(prev => {
+            const newCharge = prev + 2;
+            if (tickSynth.current) {
+                const pitch = 40 + (newCharge * 1.5);
+                tickSynth.current.triggerAttackRelease(pitch, "8n");
+            }
+            if (newCharge >= 100) {
+                clearInterval(chargeIntervalRef.current);
+                setIsCharging(false);
+                setCharge(0);
+                drawNextWinner();
+                return 100;
+            }
+            return newCharge;
+        });
+    }, 30);
+  };
+
+  const stopCharging = () => {
+    clearInterval(chargeIntervalRef.current);
+    setIsCharging(false);
+    setCharge(0);
+  };
+
+  const runSingleWinnerAnimation = (winnerEntry, isFinalWinnerOfBatch) => {
+    return new Promise((resolve) => {
+        const isFinalPrize = winnersHistory.length + 1 === prizes.length;
+        const slowMoDuration = isFinalPrize && isFinalWinnerOfBatch ? 14000 : 4000;
+        
+        const animationStart = Date.now();
+        
+        if (drawMode === 'names') {
+            const nameAnimationLoop = () => {
+                const elapsed = Date.now() - animationStart;
+                if (elapsed >= slowMoDuration) {
+                    setDisplayValue(winnerEntry);
+                    resolve();
+                    return;
+                }
+                setDisplayValue(initialEntries[Math.floor(Math.random() * initialEntries.length)]);
+                if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "8n");
+                const progress = elapsed / slowMoDuration;
+                const easing = 1 - Math.pow(1 - progress, 2);
+                const nextDelay = 50 + easing * 400;
+                timeoutRef.current = setTimeout(nameAnimationLoop, nextDelay);
+            };
+            nameAnimationLoop();
+        } else {
+            const winnerDigits = getDigits(winnerEntry);
+            const lockTimings = Array.from({ length: maxDigits - 1 }, (_, i) => 800 + i * 400);
+            const slowMoStartTime = lockTimings[lockTimings.length - 1] || 800;
+            
+            const animationLoop = () => {
+                const elapsed = Date.now() - animationStart;
+                let nextDelay = 75;
+
+                if (elapsed < slowMoStartTime) {
+                    const newDisplayDigits = winnerDigits.map((digit, index) => {
+                        if (index >= maxDigits - 1) return Math.floor(Math.random() * 10);
+                        if (elapsed >= lockTimings[index]) return digit;
+                        return Math.floor(Math.random() * 10);
+                    });
+                    setDisplayValue(newDisplayDigits.join(''));
+                    if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "8n");
+                } else {
+                    const slowMoElapsed = elapsed - slowMoStartTime;
+                    if (slowMoElapsed >= slowMoDuration) {
+                        setDisplayValue(winnerDigits.join(''));
+                        resolve();
+                        return;
+                    }
+                    
+                    if (isFinalPrize && slowMoElapsed >= slowMoDuration - 2000 && !almostTriggered.current) {
+                        almostTriggered.current = true;
+                        let fakeDigit = Math.floor(Math.random() * 10);
+                        const finalWinnerDigit = parseInt(winnerDigits[maxDigits - 1], 10);
+                        while (fakeDigit === finalWinnerDigit) {
+                            fakeDigit = Math.floor(Math.random() * 10);
+                        }
+                        
+                        const newDisplayDigits = [...winnerDigits];
+                        newDisplayDigits[maxDigits - 1] = fakeDigit;
+                        setDisplayValue(newDisplayDigits.join(''));
+        
+                        timeoutRef.current = setTimeout(() => {
+                            timeoutRef.current = setTimeout(animationLoop, 50);
+                        }, 800);
+                        return;
+                    }
+
+                    const newDisplayDigits = [...winnerDigits];
+                    const finalDigitIndex = maxDigits - 1;
+                    const progress = slowMoElapsed / slowMoDuration;
+                    const easing = 1 - Math.pow(1 - progress, 2);
+                    const totalSteps = 10;
+                    const currentStep = Math.floor(easing * totalSteps);
+                    const finalDigit = parseInt(winnerDigits[finalDigitIndex], 10);
+                    newDisplayDigits[finalDigitIndex] = (finalDigit + totalSteps - currentStep) % 10;
+                    setDisplayValue(newDisplayDigits.join(''));
+                    
+                    if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "8n");
+                    nextDelay = 50 + easing * 400;
+                }
+                timeoutRef.current = setTimeout(animationLoop, nextDelay);
+            };
+            animationLoop();
+        }
+    });
+  };
+
+  const drawNextWinner = async () => {
+    const numToDraw = Math.min(winnersPerPrize, remainingEntries.length);
+    if (drawing || numToDraw === 0 || winnersHistory.length >= prizes.length) {
+        if (remainingEntries.length === 0) setError('All entries have been drawn!');
+        if (winnersHistory.length >= prizes.length) setError('All prizes have been awarded!');
+        return;
     }
 
     setDrawing(true);
     setError('');
     setShowConfetti(false);
     setPulse(true);
-    almostTriggered.current = false;
     
     const currentPrizeName = getPrizeName();
     setCurrentPrize(currentPrizeName);
 
     const drawnTickets = [];
-    const tempRemaining = [...remainingTickets];
+    let tempRemaining = [...remainingEntries];
     for(let i = 0; i < numToDraw; i++) {
         const winnerIndex = Math.floor(Math.random() * tempRemaining.length);
         drawnTickets.push(tempRemaining.splice(winnerIndex, 1)[0]);
     }
 
-    const firstWinnerDigits = getDigits(drawnTickets[0]);
-
-    const prizeNumber = drawOrder === 'asc' ? winnersHistory.length + 1 : numPrizes - winnersHistory.length;
-    const isFinalPrize = (drawOrder === 'desc' && prizeNumber === 1) || (drawOrder === 'asc' && prizeNumber === numPrizes);
-
-    const animationStart = Date.now();
-    
-    const lockTimings = Array.from({ length: maxDigits - 1 }, (_, i) => 800 + i * 400);
-    const slowMoStartTime = lockTimings[lockTimings.length - 1] || 800;
-    const slowMoDuration = isFinalPrize ? 14000 : 4000;
-
-    const animationLoop = () => {
-        const elapsed = Date.now() - animationStart;
-        let nextDelay = 75;
-
-        if (elapsed < slowMoStartTime) {
-            const newDisplayDigits = firstWinnerDigits.map((digit, index) => {
-                if (index >= maxDigits - 1) return Math.floor(Math.random() * 10);
-                if (elapsed >= lockTimings[index]) {
-                    return digit;
-                }
-                return Math.floor(Math.random() * 10);
-            });
-            setDisplayDigits(newDisplayDigits);
-            if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "8n");
-        } 
-        else {
-            const slowMoElapsed = elapsed - slowMoStartTime;
-
-            if (slowMoElapsed >= slowMoDuration) {
-                setDisplayDigits(firstWinnerDigits);
-                const newHistory = [...winnersHistory, { prize: currentPrizeName, tickets: drawnTickets }];
-                setWinnersHistory(newHistory);
-                setRemainingTickets(tempRemaining);
-                setDrawing(false);
-                setShowConfetti(true);
-                setTimeout(() => setShowConfetti(false), 8000);
-
-                if (winSynth.current) {
-                    const now = window.Tone.now();
-                    if (isFinalPrize) {
-                        fireworkWhoosh.current.triggerAttack(now);
-                        for(let i = 0; i < 10; i++) {
-                           fireworkCrackle.current.triggerAttackRelease("16n", now + 0.3 + Math.random() * 0.5);
-                        }
-                        winSynth.current.triggerAttackRelease(["C4", "G4", "C5", "E5"], "2s", now + 0.8);
-                        winSynth.current.triggerAttackRelease(["F4", "A4", "C5", "F5"], "2s", now + 1.8);
-                        winSynth.current.triggerAttackRelease(["G4", "B4", "D5", "G5"], "3s", now + 2.8);
-                    } else {
-                        winSynth.current.triggerAttackRelease(["C4", "E4", "G4"], "1s");
+    for (let i = 0; i < drawnTickets.length; i++) {
+        const ticket = drawnTickets[i];
+        const isFinalWinnerOfBatch = i === drawnTickets.length - 1;
+        await runSingleWinnerAnimation(ticket, isFinalWinnerOfBatch);
+        if (isFinalWinnerOfBatch) {
+             const isFinalPrize = winnersHistory.length + 1 === prizes.length;
+             if (winSynth.current) {
+                const now = window.Tone.now();
+                if (isFinalPrize) {
+                    fireworkWhoosh.current.triggerAttack(now);
+                    for(let i = 0; i < 10; i++) {
+                       fireworkCrackle.current.triggerAttackRelease("16n", now + 0.3 + Math.random() * 0.5);
                     }
+                    winSynth.current.triggerAttackRelease(["C4", "G4", "C5", "E5"], "2s", now + 0.8);
+                    winSynth.current.triggerAttackRelease(["F4", "A4", "C5", "F5"], "2s", now + 1.8);
+                    winSynth.current.triggerAttackRelease(["G4", "B4", "D5", "G5"], "3s", now + 2.8);
+                } else {
+                    winSynth.current.triggerAttackRelease(["C4", "E4", "G4"], "1s");
                 }
-                return;
             }
-            
-            if (isFinalPrize && slowMoElapsed >= slowMoDuration - 2000 && !almostTriggered.current) {
-                almostTriggered.current = true;
-                let fakeDigit = Math.floor(Math.random() * 10);
-                const finalWinnerDigit = parseInt(firstWinnerDigits[maxDigits - 1], 10);
-                while (fakeDigit === finalWinnerDigit) {
-                    fakeDigit = Math.floor(Math.random() * 10);
-                }
-                
-                const newDisplayDigits = [...firstWinnerDigits];
-                newDisplayDigits[maxDigits - 1] = fakeDigit;
-                setDisplayDigits(newDisplayDigits);
-
-                timeoutRef.current = setTimeout(() => {
-                    timeoutRef.current = setTimeout(animationLoop, 50);
-                }, 800);
-                return;
-            }
-
-            const newDisplayDigits = [...firstWinnerDigits];
-            newDisplayDigits[maxDigits - 1] = Math.floor(Math.random() * 10);
-            setDisplayDigits(newDisplayDigits);
-            if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "8n");
-
-            const progress = slowMoElapsed / slowMoDuration;
-            const easing = 1 - Math.pow(1 - progress, 4);
-            nextDelay = 50 + easing * 800;
+            setShowConfetti(true);
+            setTimeout(() => setShowConfetti(false), 5000);
+        } else {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Pause between reveals
         }
+    }
 
-        timeoutRef.current = setTimeout(animationLoop, nextDelay);
-    };
-
-    animationLoop();
+    const newHistory = [...winnersHistory, { prize: currentPrizeName, tickets: drawnTickets }];
+    setWinnersHistory(newHistory);
+    setRemainingEntries(tempRemaining);
+    setDrawing(false);
   };
 
   useEffect(() => {
@@ -513,11 +667,12 @@ export default function App() {
         };
         exportAllImage();
     }
-  }, [exportAllTrigger, theme, title]);
+  }, [exportAllTrigger, theme, title, logo, winnersHistory]);
   
   useEffect(() => {
     return () => {
         clearTimeout(timeoutRef.current);
+        clearInterval(chargeIntervalRef.current);
     };
   }, []);
 
@@ -547,11 +702,16 @@ export default function App() {
       
        {logo && <img src={logo} alt="Event Logo" className="absolute top-4 left-4 h-16 w-auto z-30" />}
        
-       {sessionToRestore && (
-        <div className="absolute top-0 left-0 right-0 bg-yellow-500 text-black p-2 flex justify-center items-center gap-4 z-50">
-            <span>We found a previous session.</span>
-            <Button onClick={() => restoreSession(sessionToRestore)} className="!bg-black !text-white text-sm !py-1">Restore</Button>
-            <Button onClick={() => setSessionToRestore(null)} className="!bg-transparent !text-black text-sm !py-1">Dismiss</Button>
+       {successMessage && (
+        <div className="absolute top-0 left-0 right-0 bg-green-600 text-white p-2 flex justify-center items-center gap-4 z-50">
+            <span>{successMessage}</span>
+            <Button onClick={() => setSuccessMessage('')} className="!bg-transparent !text-white text-lg !py-0 !px-2">&times;</Button>
+        </div>
+       )}
+       {error && (
+        <div className="absolute top-0 left-0 right-0 bg-red-600 text-white p-2 flex justify-center items-center gap-4 z-50">
+            <span>Error: {error}</span>
+            <Button onClick={() => setError('')} className="!bg-transparent !text-white text-lg !py-0 !px-2">&times;</Button>
         </div>
        )}
 
@@ -577,6 +737,7 @@ export default function App() {
                     </div>
                     <div className="flex border-b border-[var(--panel-border)] mb-4">
                         <button className={`py-2 px-4 ${settingsTab === 'main' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('main')}>Main</button>
+                        <button className={`py-2 px-4 ${settingsTab === 'sound' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('sound')}>Sound</button>
                         <button className={`py-2 px-4 ${settingsTab === 'about' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('about')}>About</button>
                     </div>
                 </div>
@@ -592,43 +753,79 @@ export default function App() {
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Event Title</label>
-                                <Input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
-                                <label className="text-xs mt-1 block">Line Spacing: {titleLineSpacing}</label>
-                                <input type="range" min="0.8" max="2" step="0.1" value={titleLineSpacing} onChange={e => setTitleLineSpacing(e.target.value)} className="w-full" />
+                                <div className="flex items-center gap-2">
+                                    <Input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
+                                    <input type="color" value={titleColor || themes[theme]['--title-color']} onChange={e => setTitleColor(e.target.value)} className="w-10 h-10 p-1 bg-transparent border-none cursor-pointer" />
+                                </div>
+                                <label className="text-xs mt-1 block">Font Family</label>
+                                <select value={titleFont} onChange={e => setTitleFont(e.target.value)} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm">
+                                    {Object.keys(fonts).map(fontName => (<option key={fontName} value={fonts[fontName]}>{fontName}</option>))}
+                                </select>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs mt-1 block">Font Size (px)</label>
+                                        <Input type="number" value={titleFontSize} onChange={e => setTitleFontSize(parseInt(e.target.value, 10) || 16)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs mt-1 block">Line Spacing</label>
+                                        <Input type="number" step="0.1" value={titleLineSpacing} onChange={e => setTitleLineSpacing(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                </div>
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Event Subtitle</label>
-                                <Input type="text" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
-                                <label className="text-xs mt-1 block">Line Spacing: {subtitleLineSpacing}</label>
-                                <input type="range" min="0.8" max="2.5" step="0.1" value={subtitleLineSpacing} onChange={e => setSubtitleLineSpacing(e.target.value)} className="w-full" />
+                                 <div className="flex items-center gap-2">
+                                    <Input type="text" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
+                                    <input type="color" value={subtitleColor || themes[theme]['--text-muted']} onChange={e => setSubtitleColor(e.target.value)} className="w-10 h-10 p-1 bg-transparent border-none cursor-pointer" />
+                                </div>
+                                <label className="text-xs mt-1 block">Font Family</label>
+                                <select value={subtitleFont} onChange={e => setSubtitleFont(e.target.value)} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm">
+                                    {Object.keys(fonts).map(fontName => (<option key={fontName} value={fonts[fontName]}>{fontName}</option>))}
+                                </select>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs mt-1 block">Font Size (px)</label>
+                                        <Input type="number" value={subtitleFontSize} onChange={e => setSubtitleFontSize(parseInt(e.target.value, 10) || 16)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs mt-1 block">Line Spacing</label>
+                                        <Input type="number" step="0.1" value={subtitleLineSpacing} onChange={e => setSubtitleLineSpacing(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                </div>
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Ticket Numbers</label>
                                 <div className="flex items-center gap-2">
                                     <Input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="e.g., 001-100 or 001, 007" className="flex-grow bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
-                                    <Button onClick={updateTickets} disabled={drawing} className="flex-shrink-0" style={{backgroundColor: 'var(--button-primary-bg)'}}>Set</Button>
+                                    <Button onClick={updateEntries} disabled={drawing} className="flex-shrink-0" style={{backgroundColor: 'var(--button-primary-bg)'}}>Set</Button>
                                 </div>
-                                <Button onClick={() => fileInputRef.current.click()} disabled={drawing} className="w-full mt-2 text-sm !bg-gray-600 hover:!bg-gray-700">Load from File (.txt)</Button>
+                                <Button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={drawing} className="w-full mt-2 text-sm !bg-gray-600 hover:!bg-gray-700">Load from File (.txt)</Button>
                                 <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".txt" className="hidden" />
                             </div>
+                            <div>
+                                <label className="font-semibold text-sm mb-1 block">Prizes</label>
+                                {prizes.map((prize, index) => (
+                                    <div key={prize.id} className="flex items-center gap-2 mb-2">
+                                        <Input type="text" value={prize.name} onChange={e => {
+                                            const newPrizes = [...prizes];
+                                            newPrizes[index].name = e.target.value;
+                                            setPrizes(newPrizes);
+                                        }} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                        <Button onClick={() => setPrizes(prizes.filter(p => p.id !== prize.id))} className="!bg-red-600 text-xs !p-2">X</Button>
+                                    </div>
+                                ))}
+                                <Button onClick={() => setPrizes([...prizes, {id: Date.now(), name: `New Prize`}])} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Add Prize</Button>
+                            </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label htmlFor="num-prizes" className="font-semibold text-sm mb-1 block">Total Prizes</label>
-                                    <Input id="num-prizes" type="number" value={numPrizes} onChange={(e) => setNumPrizes(Math.max(1, parseInt(e.target.value, 10) || 1))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} min="1" />
-                                </div>
                                 <div>
                                     <label htmlFor="winners-per-prize" className="font-semibold text-sm mb-1 block">Winners per Prize</label>
                                     <Input id="winners-per-prize" type="number" value={winnersPerPrize} onChange={(e) => setWinnersPerPrize(Math.max(1, parseInt(e.target.value, 10) || 1))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} min="1" />
                                 </div>
                             </div>
                             <div>
-                                <label className="font-semibold text-sm mb-1 block">Draw Order</label>
-                                <Button onClick={() => setDrawOrder(p => p === 'asc' ? 'desc' : 'asc')} disabled={drawing} className="w-full" style={{backgroundColor: 'var(--button-primary-bg)'}}>{drawOrder === 'desc' ? 'Last to 1st' : '1st to Last'}</Button>
-                            </div>
-                            <div>
                                 <label className="font-semibold text-sm mb-1 block">Custom Background</label>
                                 <div className="flex items-center gap-2 mt-2">
-                                    <Button onClick={() => bgImageInputRef.current.click()} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Upload Image</Button>
+                                    <Button onClick={() => bgImageInputRef.current && bgImageInputRef.current.click()} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Upload Image</Button>
                                     <Button onClick={() => setBackgroundImage('')} disabled={drawing || !backgroundImage} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Remove Image</Button>
                                 </div>
                                 <input type="file" ref={bgImageInputRef} onChange={handleBgImageUpload} accept="image/*" className="hidden" />
@@ -636,21 +833,44 @@ export default function App() {
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Logo</label>
                                 <div className="flex items-center gap-2">
-                                    <Button onClick={() => logoInputRef.current.click()} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Upload Logo</Button>
+                                    <Button onClick={() => logoInputRef.current && logoInputRef.current.click()} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Upload Logo</Button>
                                     <Button onClick={() => setLogo(null)} disabled={drawing || !logo} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Remove</Button>
                                 </div>
                                 <input type="file" ref={logoInputRef} onChange={handleLogoUpload} accept="image/*" className="hidden" />
                             </div>
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[var(--panel-border)]">
                                 <Button onClick={handleSaveSession} disabled={drawing} className="w-full !bg-green-600 hover:!bg-green-700">Save Session</Button>
-                                <Button onClick={() => sessionInputRef.current.click()} disabled={drawing} className="w-full !bg-purple-600 hover:!bg-purple-700">Load Session</Button>
+                                <Button onClick={() => sessionInputRef.current && sessionInputRef.current.click()} disabled={drawing} className="w-full !bg-purple-600 hover:!bg-purple-700">Load Session</Button>
+                            </div>
+                        </div>
+                    )}
+                    {settingsTab === 'sound' && (
+                        <div className="space-y-6">
+                            <div>
+                                <label className="font-semibold text-sm mb-1 block">Master Volume ({masterVolume} dB)</label>
+                                <input type="range" min="-40" max="6" step="1" value={masterVolume} onChange={e => setMasterVolume(e.target.value)} className="w-full" />
+                            </div>
+                            <div>
+                                <label className="font-semibold text-sm mb-1 block">Sound Effects Volume ({sfxVolume} dB)</label>
+                                <input type="range" min="-40" max="6" step="1" value={sfxVolume} onChange={e => setSfxVolume(e.target.value)} className="w-full" />
+                            </div>
+                            <div>
+                                <label className="font-semibold text-sm mb-1 block">Music Volume ({musicVolume} dB)</label>
+                                <input type="range" min="-40" max="6" step="1" value={musicVolume} onChange={e => setMusicVolume(e.target.value)} className="w-full" />
+                            </div>
+                            <div className="pt-4 border-t border-[var(--panel-border)]">
+                                <h3 className="text-lg font-bold text-[var(--text-color)] mb-2">Soundboard</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Button onClick={playDrumroll} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Drumroll</Button>
+                                    <Button onClick={playApplause} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Applause</Button>
+                                </div>
                             </div>
                         </div>
                     )}
                     {settingsTab === 'about' && (
                         <div className="space-y-4 text-[var(--text-muted)]">
                             <h3 className="text-xl font-bold text-[var(--text-color)]">Lucky Draw Pro</h3>
-                            <p>Version 1.5.0</p>
+                            <p>Version 1.9.0</p>
                             <p>A fully customizable application for running exciting live lucky draws for any event. This tool is designed for reliability and high audience engagement.</p>
                             <p className="pt-4">Created by: <span className="font-bold text-[var(--text-color)]">Tao Mon Lae</span></p>
                         </div>
@@ -661,8 +881,8 @@ export default function App() {
       </AnimatePresence>
       
       <div className="text-center z-10" style={{textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
-        <h1 className="text-5xl font-bold" style={{color: 'var(--title-color)', lineHeight: titleLineSpacing}}>{title}</h1>
-        <p className="mt-2" style={{color: 'var(--text-muted)', lineHeight: subtitleLineSpacing}}>{subtitle}</p>
+        <h1 className="font-bold" style={{color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, fontFamily: titleFont, fontSize: `${titleFontSize}px`}}>{title}</h1>
+        <p className="mt-2" style={{color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, fontFamily: subtitleFont, fontSize: `${subtitleFontSize}px`}}>{subtitle}</p>
       </div>
 
       <div className="flex flex-col items-center z-20">
@@ -681,26 +901,64 @@ export default function App() {
             transition={pulse ? {duration: 0.8, ease: 'easeInOut'} : {}}
             onAnimationComplete={() => setPulse(false)}
         >
-            <div className="flex text-7xl md:text-8xl font-mono font-bold tracking-widest" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`}}>
-                {displayDigits.map((digit, index) => (
-                    <div key={index} className="w-[1ch] text-center overflow-hidden">
-                        <AnimatePresence mode="popLayout">
-                            <motion.span key={digit + '-' + index} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
-                                {digit === ' ' ? '\u00A0' : digit}
-                            </motion.span>
-                        </AnimatePresence>
-                    </div>
-                ))}
-            </div>
+            {drawMode === 'numbers' ? (
+                <div className="flex text-7xl md:text-8xl font-mono font-bold tracking-widest" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`}}>
+                    {getDigits(displayValue).map((digit, index) => (
+                        <div key={index} className="w-[1ch] text-center overflow-hidden">
+                            <AnimatePresence mode="popLayout">
+                                <motion.span key={digit + '-' + index} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
+                                    {digit === ' ' ? '\u00A0' : digit}
+                                </motion.span>
+                            </AnimatePresence>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                 <div className="text-4xl md:text-5xl font-bold px-4 text-center" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`}}>
+                    <AnimatePresence mode="popLayout">
+                        <motion.span key={displayValue} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
+                            {displayValue}
+                        </motion.span>
+                    </AnimatePresence>
+                </div>
+            )}
         </motion.div>
       </div>
 
       <div className="flex flex-col items-center gap-2 z-20">
-        <div className="font-semibold">Prizes Drawn: {winnersHistory.length} / {numPrizes}</div>
-        <div className="text-sm" style={{color: 'var(--text-muted)'}}>{remainingTickets.length} / {initialTickets.length} Tickets Remaining</div>
-        <Button onClick={drawNextWinner} disabled={drawing || remainingTickets.length === 0 || winnersHistory.length >= numPrizes} className="px-10 py-4 text-xl mt-2 text-black" style={{backgroundColor: 'var(--button-action-bg)'}}>
-          {drawing ? "Drawing..." : "Draw Next Prize"}
-        </Button>
+        <div className="font-semibold">Prizes Drawn: {winnersHistory.length} / {prizes.length}</div>
+        <div className="text-sm" style={{color: 'var(--text-muted)'}}>{remainingEntries.length} / {initialEntries.length} Entries Remaining</div>
+        <div className="relative w-full max-w-xs mt-2">
+            <AnimatePresence>
+            {isCharging && (
+                <motion.div
+                    className="absolute bottom-full left-0 right-0 mb-2 h-4 rounded-full"
+                    style={{backgroundColor: 'var(--panel-border)'}}
+                    initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}
+                >
+                    <motion.div 
+                        className="h-4 rounded-full"
+                        style={{backgroundColor: 'var(--button-action-bg)'}}
+                        initial={{width: 0}}
+                        animate={{width: `${charge}%`}}
+                        transition={{duration: 0.1, ease: 'linear'}}
+                    />
+                </motion.div>
+            )}
+            </AnimatePresence>
+            <Button 
+                onMouseDown={startCharging}
+                onMouseUp={stopCharging}
+                onMouseLeave={stopCharging}
+                onTouchStart={startCharging}
+                onTouchEnd={stopCharging}
+                disabled={drawing || remainingEntries.length === 0 || winnersHistory.length >= prizes.length} 
+                className="w-full px-10 py-4 text-xl text-black" 
+                style={{backgroundColor: 'var(--button-action-bg)'}}
+            >
+              {isCharging ? "Charging..." : "Hold to Draw"}
+            </Button>
+        </div>
       </div>
       
       {winnersHistory.length > 0 && (
