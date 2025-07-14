@@ -883,11 +883,11 @@ const HostView = () => {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-xs mt-1 block">Font Size (px)</label>
-                                        <Input type="number" value={subtitleFontSize} onChange={e => setSubtitleFontSize(parseInt(e.target.value, 10) || 16)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                        <Input type="range" value={subtitleFontSize} onChange={e => setSubtitleFontSize(parseInt(e.target.value, 10) || 16)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                     <div>
                                         <label className="text-xs mt-1 block">Line Spacing</label>
-                                        <Input type="number" step="0.1" value={subtitleLineSpacing} onChange={e => setSubtitleLineSpacing(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                        <Input type="range" step="0.1" value={subtitleLineSpacing} onChange={e => setSubtitleLineSpacing(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                 </div>
                             </div>
