@@ -378,21 +378,6 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
   
-  const handleLoadSession = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        try {
-            restoreSession(JSON.parse(event.target.result));
-        } catch (err) {
-            setError('Invalid or corrupted session file.');
-            setTimeout(() => setError(''), 3000);
-        }
-   };
-    reader.readAsText(file);
-    e.target.value = null;
-  };
   
   const handleFileImport = (e) => {
     const file = e.target.files[0];
