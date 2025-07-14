@@ -210,41 +210,6 @@ export default function App() {
   ]);
 
 
-        }
-        setInitialEntries(data.initialEntries || []);
-        setRemainingEntries(data.remainingEntries || []);
-        setWinnersHistory(data.winnersHistory || []);
-        setPrizes(data.prizes || [{ id: 1, name: '3rd Prize' }, { id: 2, name: '2nd Prize' }, { id: 3, name: '1st Prize' }]);
-        setInputValue(data.inputValue || '1-50');
-        const restoredMaxDigits = data.maxDigits || 2;
-        setMaxDigits(restoredMaxDigits);
-        setTitle(data.title || 'Live Lucky Draw');
-        setSubtitle(data.subtitle || 'The most exciting draw on the web!');
-        setTitleLineSpacing(data.titleLineSpacing || 1.2);
-        setSubtitleLineSpacing(data.subtitleLineSpacing || 1.5);
-        setTitleFontSize(data.titleFontSize || 48);
-        setSubtitleFontSize(data.subtitleFontSize || 16);
-        setWinnersPerPrize(data.winnersPerPrize || 1);
-        setTheme(data.theme || 'Event Night');
-        setLogo(data.logo || null);
-        setBackgroundImage(data.backgroundImage || '');
-        setMasterVolume(data.masterVolume ?? 0);
-        setSfxVolume(data.sfxVolume ?? -6);
-        setMusicVolume(data.musicVolume ?? 0);
-        setTitleColor(data.titleColor || '');
-        setSubtitleColor(data.subtitleColor || '');
-        setTitleFont(data.titleFont || 'sans-serif');
-        setSubtitleFont(data.subtitleFont || 'sans-serif');
-        setDrawMode(data.drawMode || 'numbers');
-        const firstEntry = (data.remainingEntries && data.remainingEntries[0]) || (data.initialEntries && data.initialEntries[0]) || '1';
-        setDisplayValue(firstEntry);
-        setSuccessMessage('Session restored successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (err) {
-        setError('Invalid or corrupted session file.');
-        setTimeout(() => setError(''), 3000);
-    }
-  };
 
   // Script and Audio Setup
   useEffect(() => {
