@@ -119,6 +119,89 @@ const ConfettiParticle = ({ colors, ...props }) => {
 // --- Main App Component ---
 
 export default function App() {
+  const [view, setView] = useState('host');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'public') {
+      setView('public');
+    }
+  }, []);
+
+  if (view === 'public') {
+    return <PublicView />;
+  }
+
+  return <HostView />;
+}
+
+// --- Jumbotron / Public View ---
+const PublicView = () => {
+    const [drawState, setDrawState] = useState(null);
+
+    const updateState = () => {
+        try {
+            const savedState = localStorage.getItem('lucky-draw-autosave');
+            if (savedState) {
+                setDrawState(JSON.parse(savedState));
+            }
+        } catch (e) {
+            console.error("Failed to parse public state", e);
+        }
+    };
+
+    useEffect(() => {
+        updateState(); // Initial load
+        window.addEventListener('storage', updateState);
+        return () => {
+            window.removeEventListener('storage', updateState);
+        };
+    }, []);
+
+    if (!drawState) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-100 text-gray-800">
+                Waiting for draw to start...
+            </div>
+        );
+    }
+
+    const { title, logo, winnersHistory } = drawState;
+    
+    const vintageStyle = {
+        fontFamily: "'Playfair Display', serif",
+        backgroundColor: '#fdf6e3',
+        backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+    };
+
+    return (
+        <div style={vintageStyle} className="min-h-screen p-8 text-[#3a2f2f]">
+            <div className="max-w-4xl mx-auto">
+                {logo && <img src={logo} alt="Event Logo" className="h-24 w-auto mx-auto mb-6" />}
+                <h1 className="text-5xl font-bold text-center mb-8" style={{fontFamily: "'Lobster', cursive"}}>{title} - Winners</h1>
+                
+                {winnersHistory.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {winnersHistory.map(group => (
+                            <div key={group.prize} className="bg-white bg-opacity-50 p-6 rounded-lg shadow-lg border border-gray-300">
+                                <h3 className="text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4" style={{fontFamily: "'Lobster', cursive"}}>{group.prize}</h3>
+                                <ul className="space-y-2">
+                                    {group.tickets.map(ticket => <li key={ticket} className="font-mono text-2xl bg-gray-100 px-3 py-1 rounded">{ticket}</li>)}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-center text-2xl mt-16">Winners will be displayed here as they are drawn...</p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+// --- Host View ---
+const HostView = () => {
   const [maxDigits, setMaxDigits] = useState(2);
   const getDigits = (numOrStr) => String(numOrStr).padStart(maxDigits, '0').split('');
 
@@ -175,6 +258,7 @@ export default function App() {
   const bgImageInputRef = useRef(null);
   const exportRef = useRef(null);
   const exportAllRef = useRef(null);
+  const qrCodeRef = useRef(null);
   const audioStarted = useRef(false);
   const almostTriggered = useRef(false);
   const sfxVolumeNode = useRef(null);
@@ -209,7 +293,45 @@ export default function App() {
     titleFontSize, subtitleFontSize, drawMode
   ]);
 
-
+  const restoreSession = (data) => {
+    try {
+        if (!data || typeof data !== 'object' || !Array.isArray(data.initialEntries)) {
+            throw new Error("Invalid session data structure.");
+        }
+        setInitialEntries(data.initialEntries || []);
+        setRemainingEntries(data.remainingEntries || []);
+        setWinnersHistory(data.winnersHistory || []);
+        setPrizes(data.prizes || [{ id: 1, name: '3rd Prize' }, { id: 2, name: '2nd Prize' }, { id: 3, name: '1st Prize' }]);
+        setInputValue(data.inputValue || '1-50');
+        const restoredMaxDigits = data.maxDigits || 2;
+        setMaxDigits(restoredMaxDigits);
+        setTitle(data.title || 'Live Lucky Draw');
+        setSubtitle(data.subtitle || 'The most exciting draw on the web!');
+        setTitleLineSpacing(data.titleLineSpacing || 1.2);
+        setSubtitleLineSpacing(data.subtitleLineSpacing || 1.5);
+        setTitleFontSize(data.titleFontSize || 48);
+        setSubtitleFontSize(data.subtitleFontSize || 16);
+        setWinnersPerPrize(data.winnersPerPrize || 1);
+        setTheme(data.theme || 'Event Night');
+        setLogo(data.logo || null);
+        setBackgroundImage(data.backgroundImage || '');
+        setMasterVolume(data.masterVolume ?? 0);
+        setSfxVolume(data.sfxVolume ?? -6);
+        setMusicVolume(data.musicVolume ?? 0);
+        setTitleColor(data.titleColor || '');
+        setSubtitleColor(data.subtitleColor || '');
+        setTitleFont(data.titleFont || 'sans-serif');
+        setSubtitleFont(data.subtitleFont || 'sans-serif');
+        setDrawMode(data.drawMode || 'numbers');
+        const firstEntry = (data.remainingEntries && data.remainingEntries[0]) || (data.initialEntries && data.initialEntries[0]) || '1';
+        setDisplayValue(firstEntry);
+        setSuccessMessage('Session restored successfully!');
+        setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+        setError('Invalid or corrupted session file.');
+        setTimeout(() => setError(''), 3000);
+    }
+  };
 
   // Script and Audio Setup
   useEffect(() => {
@@ -223,6 +345,7 @@ export default function App() {
     };
     loadScript('https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js', () => setScriptsLoaded(s => ({...s, htmlToImage: true})));
     loadScript('https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js', () => setScriptsLoaded(s => ({...s, tone: true})));
+    loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', () => setScriptsLoaded(s => ({...s, qrcode: true})));
   }, []);
 
   useEffect(() => {
@@ -253,6 +376,19 @@ export default function App() {
   useEffect(() => {
     if(musicVolumeNode.current) musicVolumeNode.current.volume.value = musicVolume;
   }, [musicVolume]);
+
+  useEffect(() => {
+    if (settingsTab === 'jumbotron' && scriptsLoaded.qrcode && qrCodeRef.current) {
+        qrCodeRef.current.innerHTML = '';
+        new window.QRCode(qrCodeRef.current, {
+            text: window.location.href + '?view=public',
+            width: 192,
+            height: 192,
+            colorDark: themes[theme]['--text-color'],
+            colorLight: themes[theme]['--bg-color'],
+        });
+    }
+  }, [settingsTab, scriptsLoaded.qrcode, theme]);
 
   // Logic Functions
   const getPrizeName = () => {
@@ -340,6 +476,21 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
   
+  const handleLoadSession = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            restoreSession(JSON.parse(event.target.result));
+        } catch (err) {
+            setError('Invalid or corrupted session file.');
+            setTimeout(() => setError(''), 3000);
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = null;
+  };
   
   const handleFileImport = (e) => {
     const file = e.target.files[0];
