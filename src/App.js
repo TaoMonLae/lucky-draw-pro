@@ -209,10 +209,7 @@ export default function App() {
     titleFontSize, subtitleFontSize, drawMode
   ]);
 
-  const restoreSession = (data) => {
-    try {
-        if (!data || typeof data !== 'object' || !Array.isArray(data.initialEntries)) {
-            throw new Error("Invalid session data structure.");
+
         }
         setInitialEntries(data.initialEntries || []);
         setRemainingEntries(data.remainingEntries || []);
