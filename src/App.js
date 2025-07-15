@@ -796,7 +796,7 @@ const HostView = () => {
           />
         )}
       </AnimatePresence>
-      {showConfetti && Array.from({ length: 100 }).map((_, i) => <ConfettiParticle key={i} colors={currentTheme['--confetti-colors']} />)}
+      {showConfetti && Array.from({ length: 70 }).map((_, i) => <ConfettiParticle key={i} colors={currentTheme['--confetti-colors']} />)}
       
        {logo && <img src={logo} alt="Event Logo" className="absolute top-4 left-4 h-16 w-auto z-30" />}
        
