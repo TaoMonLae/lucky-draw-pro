@@ -71,13 +71,15 @@ const themes = {
 };
 
 const fonts = {
-    'Sans Serif': 'sans-serif',
-    'Serif': 'serif',
-    'Monospace': 'monospace',
-    'Montserrat': 'Montserrat',
-    'Playfair Display': 'Playfair Display',
-    'Roboto': 'Roboto',
-    'Lobster': 'Lobster',
+    'Sans Serif': "Inter, 'Noto Sans Myanmar', 'Myanmar Text', 'Padauk', 'Tharlon', 'Pyidaungsu', sans-serif",
+    'Serif': "'Noto Serif Myanmar', 'Times New Roman', serif",
+    'Monospace': "'Roboto Mono', 'Noto Sans Myanmar', 'Myanmar Text', monospace",
+    'Montserrat': "Montserrat, 'Noto Sans Myanmar', 'Myanmar Text', sans-serif",
+    'Playfair Display': "'Playfair Display', 'Noto Serif Myanmar', serif",
+    'Roboto': "Roboto, 'Noto Sans Myanmar', 'Myanmar Text', sans-serif",
+    'Lobster': "Lobster, 'Noto Sans Myanmar', 'Myanmar Text', cursive",
+    'Burmese Sans (Myanmar)': "'Noto Sans Myanmar', 'Myanmar Text', 'Padauk', 'Tharlon', 'Pyidaungsu', sans-serif",
+    'Burmese Serif (Myanmar)': "'Noto Serif Myanmar', 'Myanmar Text', serif",
 };
 
 // --- Helper Components ---
@@ -234,12 +236,20 @@ const HostView = () => {
   const [subtitle, setSubtitle] = useState('The most exciting draw on the web!');
   const [titleLineSpacing, setTitleLineSpacing] = useState(1.2);
   const [subtitleLineSpacing, setSubtitleLineSpacing] = useState(1.5);
+  const [titleLetterSpacing, setTitleLetterSpacing] = useState(0);
+  const [subtitleLetterSpacing, setSubtitleLetterSpacing] = useState(0);
   const [titleFontSize, setTitleFontSize] = useState(48);
   const [subtitleFontSize, setSubtitleFontSize] = useState(16);
   const [titleColor, setTitleColor] = useState('');
   const [subtitleColor, setSubtitleColor] = useState('');
   const [titleFont, setTitleFont] = useState('sans-serif');
   const [subtitleFont, setSubtitleFont] = useState('sans-serif');
+  const [displayFont, setDisplayFont] = useState("'Roboto Mono', 'Noto Sans Myanmar', monospace");
+  const [displayFontSize, setDisplayFontSize] = useState(92);
+  const [displayLineHeight, setDisplayLineHeight] = useState(1.02);
+  const [displayLetterSpacing, setDisplayLetterSpacing] = useState(0.1);
+  const [displayBoxWidth, setDisplayBoxWidth] = useState(480);
+  const [displayBoxHeight, setDisplayBoxHeight] = useState(180);
   const [theme, setTheme] = useState('Event Night');
   const [logo, setLogo] = useState(null);
   const [backgroundImage, setBackgroundImage] = useState('');
@@ -273,6 +283,8 @@ const HostView = () => {
   const fireworkCrackle = useRef(null);
   const drumrollSynth = useRef(null);
   const applauseSynth = useRef(null);
+  const whistleSynth = useRef(null);
+  const wowSynth = useRef(null);
 
   // --- SESSION MANAGEMENT ---
   useEffect(() => {
@@ -280,9 +292,12 @@ const HostView = () => {
         initialEntries, remainingEntries, winnersHistory,
         prizes, winnersPerPrize, inputValue, maxDigits, theme, logo,
         title, subtitle, titleLineSpacing, subtitleLineSpacing,
+        titleLetterSpacing, subtitleLetterSpacing,
         backgroundImage, masterVolume, sfxVolume, musicVolume,
         titleColor, subtitleColor, titleFont, subtitleFont,
-        titleFontSize, subtitleFontSize, drawMode
+        titleFontSize, subtitleFontSize, drawMode,
+        displayFont, displayFontSize, displayLineHeight, displayLetterSpacing,
+        displayBoxWidth, displayBoxHeight
     };
     try {
         localStorage.setItem('lucky-draw-autosave', JSON.stringify(appState));
@@ -292,9 +307,10 @@ const HostView = () => {
   }, [
     initialEntries, remainingEntries, winnersHistory, prizes,
     inputValue, maxDigits, theme, logo, title, subtitle, titleLineSpacing, 
-    subtitleLineSpacing, winnersPerPrize, backgroundImage, masterVolume, 
+    subtitleLineSpacing, titleLetterSpacing, subtitleLetterSpacing, winnersPerPrize, backgroundImage, masterVolume, 
     sfxVolume, musicVolume, titleColor, subtitleColor, titleFont, subtitleFont,
-    titleFontSize, subtitleFontSize, drawMode
+    titleFontSize, subtitleFontSize, drawMode, displayFont,
+    displayFontSize, displayLineHeight, displayLetterSpacing, displayBoxWidth, displayBoxHeight
   ]);
 
   const restoreSession = (data) => {
@@ -313,6 +329,8 @@ const HostView = () => {
         setSubtitle(data.subtitle || 'The most exciting draw on the web!');
         setTitleLineSpacing(data.titleLineSpacing || 1.2);
         setSubtitleLineSpacing(data.subtitleLineSpacing || 1.5);
+        setTitleLetterSpacing(data.titleLetterSpacing ?? 0);
+        setSubtitleLetterSpacing(data.subtitleLetterSpacing ?? 0);
         setTitleFontSize(data.titleFontSize || 48);
         setSubtitleFontSize(data.subtitleFontSize || 16);
         setWinnersPerPrize(data.winnersPerPrize || 1);
@@ -326,6 +344,12 @@ const HostView = () => {
         setSubtitleColor(data.subtitleColor || '');
         setTitleFont(data.titleFont || 'sans-serif');
         setSubtitleFont(data.subtitleFont || 'sans-serif');
+        setDisplayFont(data.displayFont || "'Roboto Mono', 'Noto Sans Myanmar', monospace");
+        setDisplayFontSize(data.displayFontSize || 92);
+        setDisplayLineHeight(data.displayLineHeight || 1.02);
+        setDisplayLetterSpacing(data.displayLetterSpacing ?? 0.1);
+        setDisplayBoxWidth(data.displayBoxWidth || 480);
+        setDisplayBoxHeight(data.displayBoxHeight || 180);
         setDrawMode(data.drawMode || 'numbers');
         const firstEntry = (data.remainingEntries && data.remainingEntries[0]) || (data.initialEntries && data.initialEntries[0]) || '1';
         setDisplayValue(firstEntry);
@@ -339,6 +363,11 @@ const HostView = () => {
 
   // Script and Audio Setup
   useEffect(() => {
+    const fontLink = document.createElement('link');
+    fontLink.rel = 'stylesheet';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Lobster&family=Montserrat:wght@400;700&family=Noto+Sans+Myanmar:wght@400;600;700&family=Noto+Serif+Myanmar:wght@400;600;700&family=Playfair+Display:wght@400;700&family=Roboto+Mono:wght@400;700&family=Roboto:wght@400;700&display=swap';
+    document.head.appendChild(fontLink);
+
     const loadScript = (src, onDone) => {
         const script = document.createElement('script');
         script.src = src;
@@ -350,6 +379,10 @@ const HostView = () => {
     loadScript('https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js', () => setScriptsLoaded(s => ({...s, htmlToImage: true})));
     loadScript('https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js', () => setScriptsLoaded(s => ({...s, tone: true})));
     loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', () => setScriptsLoaded(s => ({...s, qrcode: true})));
+
+    return () => {
+        document.head.removeChild(fontLink);
+    };
   }, []);
 
   useEffect(() => {
@@ -364,6 +397,8 @@ const HostView = () => {
         
         winSynth.current = new window.Tone.PolySynth(window.Tone.Synth).connect(musicVolumeNode.current);
         applauseSynth.current = new window.Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0 }}).connect(sfxVolumeNode.current);
+        whistleSynth.current = new window.Tone.Synth({ oscillator: { type: 'triangle8' }, envelope: { attack: 0.01, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(sfxVolumeNode.current);
+        wowSynth.current = new window.Tone.FMSynth({ harmonicity: 2, modulationIndex: 8, envelope: { attack: 0.03, decay: 0.2, sustain: 0.08, release: 0.4 } }).connect(sfxVolumeNode.current);
     }
   }, [scriptsLoaded.tone, sfxVolume, musicVolume]);
 
@@ -472,9 +507,12 @@ const HostView = () => {
         initialEntries, remainingEntries, winnersHistory,
         prizes, winnersPerPrize, inputValue, maxDigits, theme, logo,
         title, subtitle, titleLineSpacing, subtitleLineSpacing,
+        titleLetterSpacing, subtitleLetterSpacing,
         titleFontSize, subtitleFontSize,
         backgroundImage, masterVolume, sfxVolume, musicVolume,
-        titleColor, subtitleColor, titleFont, subtitleFont, drawMode
+        titleColor, subtitleColor, titleFont, subtitleFont, drawMode,
+        displayFont, displayFontSize, displayLineHeight, displayLetterSpacing,
+        displayBoxWidth, displayBoxHeight
     };
     const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -553,6 +591,19 @@ const HostView = () => {
             applauseSynth.current.triggerAttackRelease('8n', `+${i * 0.03}`);
         }
     }
+  };
+
+  const playCelebration = () => {
+    const now = window.Tone?.now?.() ?? 0;
+    if (whistleSynth.current) {
+      whistleSynth.current.triggerAttackRelease('A5', '16n', now);
+      whistleSynth.current.triggerAttackRelease('C6', '8n', now + 0.12);
+    }
+    if (wowSynth.current) {
+      wowSynth.current.triggerAttackRelease('F3', '8n', now + 0.25);
+      wowSynth.current.triggerAttackRelease('A3', '8n', now + 0.35);
+    }
+    playApplause();
   };
 
   const startCharging = async () => {
@@ -714,8 +765,10 @@ const HostView = () => {
                     winSynth.current.triggerAttackRelease(["C4", "G4", "C5", "E5"], "2s", now + 0.8);
                     winSynth.current.triggerAttackRelease(["F4", "A4", "C5", "F5"], "2s", now + 1.8);
                     winSynth.current.triggerAttackRelease(["G4", "B4", "D5", "G5"], "3s", now + 2.8);
+                    playCelebration();
                 } else {
                     winSynth.current.triggerAttackRelease(["C4", "E4", "G4"], "1s");
+                    playCelebration();
                 }
             }
             setShowConfetti(true);
@@ -919,7 +972,11 @@ const HostView = () => {
                                     </div>
                                     <div>
                                         <label className="text-xs mt-1 block">Line Spacing</label>
-                                        <Input type="range" step="0.1" value={titleLineSpacing} onChange={e => setTitleLineSpacing(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                        <Input type="range" min="0.9" max="2.2" step="0.05" value={titleLineSpacing} onChange={e => setTitleLineSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs mt-1 block">Kerning / Letter Spacing (px)</label>
+                                        <Input type="range" min="-1" max="6" step="0.1" value={titleLetterSpacing} onChange={e => setTitleLetterSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                 </div>
                             </div>
@@ -940,7 +997,40 @@ const HostView = () => {
                                     </div>
                                     <div>
                                         <label className="text-xs mt-1 block">Line Spacing</label>
-                                        <Input type="range" step="0.1" value={subtitleLineSpacing} onChange={e => setSubtitleLineSpacing(e.target.value)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                        <Input type="range" min="1" max="2.5" step="0.05" value={subtitleLineSpacing} onChange={e => setSubtitleLineSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs mt-1 block">Kerning / Letter Spacing (px)</label>
+                                        <Input type="range" min="-1" max="4" step="0.1" value={subtitleLetterSpacing} onChange={e => setSubtitleLetterSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="font-semibold text-sm mb-1 block">Drawing Box & Winner Text</label>
+                                <label className="text-xs mt-1 block">Display Font</label>
+                                <select value={displayFont} onChange={e => setDisplayFont(e.target.value)} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm">
+                                    {Object.keys(fonts).map(fontName => (<option key={fontName} value={fonts[fontName]}>{fontName}</option>))}
+                                </select>
+                                <div className="grid grid-cols-2 gap-4 mt-2">
+                                    <div>
+                                        <label className="text-xs mt-1 block">Box Width (px)</label>
+                                        <Input type="range" min="260" max="700" step="10" value={displayBoxWidth} onChange={e => setDisplayBoxWidth(parseInt(e.target.value, 10))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs mt-1 block">Box Height (px)</label>
+                                        <Input type="range" min="120" max="280" step="10" value={displayBoxHeight} onChange={e => setDisplayBoxHeight(parseInt(e.target.value, 10))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs mt-1 block">Display Font Size (px)</label>
+                                        <Input type="range" min="44" max="140" step="2" value={displayFontSize} onChange={e => setDisplayFontSize(parseInt(e.target.value, 10))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs mt-1 block">Display Line Height</label>
+                                        <Input type="range" min="0.85" max="1.5" step="0.01" value={displayLineHeight} onChange={e => setDisplayLineHeight(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-xs mt-1 block">Display Letter Spacing (px)</label>
+                                        <Input type="range" min="-2" max="16" step="0.1" value={displayLetterSpacing} onChange={e => setDisplayLetterSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                 </div>
                             </div>
@@ -1014,7 +1104,7 @@ const HostView = () => {
                                 <h3 className="text-lg font-bold text-[var(--text-color)] mb-2">Soundboard</h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <Button onClick={playDrumroll} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Drumroll</Button>
-                                    <Button onClick={playApplause} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Applause</Button>
+                                    <Button onClick={playCelebration} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Whistle + Applause + Wow</Button>
                                 </div>
                             </div>
                         </div>
@@ -1033,8 +1123,8 @@ const HostView = () => {
       </AnimatePresence>
       
       <div className="text-center z-10" style={{textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
-        <h1 className="font-bold" style={{color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, fontFamily: titleFont, fontSize: `${titleFontSize}px`}}>{title}</h1>
-        <p className="mt-2" style={{color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, fontFamily: subtitleFont, fontSize: `${subtitleFontSize}px`}}>{subtitle}</p>
+        <h1 className="font-bold" style={{color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, letterSpacing: `${titleLetterSpacing}px`, fontKerning: 'normal', fontFamily: titleFont, fontSize: `${titleFontSize}px`, textRendering: 'optimizeLegibility'}}>{title}</h1>
+        <p className="mt-2" style={{color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, letterSpacing: `${subtitleLetterSpacing}px`, fontKerning: 'normal', fontFamily: subtitleFont, fontSize: `${subtitleFontSize}px`, textRendering: 'optimizeLegibility'}}>{subtitle}</p>
       </div>
 
       <div className="flex flex-col items-center z-20">
@@ -1047,14 +1137,19 @@ const HostView = () => {
         </AnimatePresence>
         <motion.div 
             ref={displayRef} 
-            className="w-full max-w-sm h-40 rounded-2xl shadow-inner flex items-center justify-center p-4 border-4"
-            style={{backgroundColor: 'var(--display-bg)', borderColor: 'var(--display-border)'}}
+            className="rounded-2xl shadow-inner flex items-center justify-center p-4 border-4"
+            style={{
+                backgroundColor: 'var(--display-bg)',
+                borderColor: 'var(--display-border)',
+                width: `min(${displayBoxWidth}px, 95vw)`,
+                height: `${displayBoxHeight}px`
+            }}
             animate={pulse ? {boxShadow: ['0 0 0px #fff', '0 0 40px #fff', '0 0 0px #fff']} : {}}
             transition={pulse ? {duration: 0.8, ease: 'easeInOut'} : {}}
             onAnimationComplete={() => setPulse(false)}
         >
             {drawMode === 'numbers' ? (
-                <div className="flex text-7xl md:text-8xl font-mono font-bold tracking-widest" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`}}>
+                <div className="flex items-center font-bold" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: `clamp(2.25rem, ${displayFontSize / 16}rem, 8.5rem)`, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, fontVariantNumeric: 'tabular-nums lining-nums'}}>
                     {getDigits(displayValue).map((digit, index) => (
                         <div key={index} className="w-[1ch] text-center overflow-hidden">
                             <AnimatePresence mode="popLayout">
@@ -1066,7 +1161,7 @@ const HostView = () => {
                     ))}
                 </div>
             ) : (
-                 <div className="text-4xl md:text-5xl font-bold px-4 text-center" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`}}>
+                 <div className="font-bold px-4 text-center" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: `clamp(2rem, ${Math.max(38, displayFontSize * 0.7) / 16}rem, 6rem)`, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`}}>
                     <AnimatePresence mode="popLayout">
                         <motion.span key={displayValue} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
                             {displayValue}
