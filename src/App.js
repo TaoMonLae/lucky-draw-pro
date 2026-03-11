@@ -153,8 +153,10 @@ const PublicView = () => {
     useEffect(() => {
         updateState(); // Initial load
         window.addEventListener('storage', updateState);
+        const refreshInterval = setInterval(updateState, 1000);
         return () => {
             window.removeEventListener('storage', updateState);
+            clearInterval(refreshInterval);
         };
     }, []);
 
@@ -247,6 +249,7 @@ const HostView = () => {
   const [masterVolume, setMasterVolume] = useState(0);
   const [sfxVolume, setSfxVolume] = useState(-6);
   const [musicVolume, setMusicVolume] = useState(0);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
 
   // Refs
   const timeoutRef = useRef(null);
@@ -258,6 +261,7 @@ const HostView = () => {
   const bgImageInputRef = useRef(null);
   const exportRef = useRef(null);
   const exportAllRef = useRef(null);
+  const drawActionRef = useRef(() => {});
   const qrCodeRef = useRef(null);
   const audioStarted = useRef(false);
   const almostTriggered = useRef(false);
@@ -376,6 +380,11 @@ const HostView = () => {
   useEffect(() => {
     if(musicVolumeNode.current) musicVolumeNode.current.volume.value = musicVolume;
   }, [musicVolume]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (settingsTab === 'jumbotron' && scriptsLoaded.qrcode && qrCodeRef.current) {
@@ -722,6 +731,31 @@ const HostView = () => {
     setDrawing(false);
   };
 
+  drawActionRef.current = drawNextWinner;
+
+  useEffect(() => {
+    const handleShortcuts = (event) => {
+      if (showSettings || event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+      if (event.code === 'Space') {
+        event.preventDefault();
+        drawActionRef.current();
+      }
+      if (event.key.toLowerCase() === 's') {
+        setShowSettings(true);
+      }
+      if (event.key.toLowerCase() === 'f') {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen?.();
+        } else {
+          document.exitFullscreen?.();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleShortcuts);
+    return () => window.removeEventListener('keydown', handleShortcuts);
+  }, [showSettings]);
+
   useEffect(() => {
     if (winnerToExport && exportRef.current && window.htmlToImage) {
         const exportImage = async () => {
@@ -775,6 +809,9 @@ const HostView = () => {
   }, []);
 
   const currentTheme = themes[theme];
+  const drawProgress = initialEntries.length ? Math.round((winnersHistory.reduce((sum, group) => sum + group.tickets.length, 0) / initialEntries.length) * 100) : 0;
+  const canDraw = !drawing && remainingEntries.length > 0 && winnersHistory.length < prizes.length;
+  const quickStatus = canDraw ? 'Ready for next draw' : drawing ? 'Drawing in progress...' : 'Draw completed';
   const mainStyle = {
     ...currentTheme,
     backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
@@ -813,9 +850,25 @@ const HostView = () => {
         </div>
        )}
 
-       <Button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 z-30 !bg-gray-700 hover:!bg-gray-600">
+      <Button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 z-30 !bg-gray-700 hover:!bg-gray-600">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.73l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.73l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </Button>
+
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[min(900px,95vw)] rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-4 py-3 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <div>
+            <p className="font-semibold">{quickStatus}</p>
+            <p style={{ color: 'var(--text-muted)' }}>Current prize: <span className="font-semibold" style={{ color: 'var(--title-color)' }}>{getPrizeName()}</span></p>
+          </div>
+          <div className="text-right">
+            <p className="text-lg font-semibold tabular-nums">{currentTime.toLocaleTimeString()}</p>
+            <p style={{ color: 'var(--text-muted)' }}>Shortcut: Space draw · S settings · F fullscreen</p>
+          </div>
+        </div>
+        <div className="mt-3 h-2 rounded-full" style={{ backgroundColor: 'var(--panel-border)' }}>
+          <div className="h-2 rounded-full transition-all duration-700" style={{ width: `${drawProgress}%`, backgroundColor: 'var(--button-action-bg)' }} />
+        </div>
+      </div>
 
       <AnimatePresence>
         {showSettings && (
@@ -939,6 +992,7 @@ const HostView = () => {
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[var(--panel-border)]">
                                 <Button onClick={handleSaveSession} disabled={drawing} className="w-full !bg-green-600 hover:!bg-green-700">Save Session</Button>
                                 <Button onClick={() => sessionInputRef.current && sessionInputRef.current.click()} disabled={drawing} className="w-full !bg-purple-600 hover:!bg-purple-700">Load Session</Button>
+                                <input type="file" ref={sessionInputRef} onChange={handleLoadSession} accept=".json" className="hidden" />
                             </div>
                         </div>
                     )}
