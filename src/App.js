@@ -644,6 +644,20 @@ const HostView = () => {
     return new Promise((resolve) => {
         const isFinalPrize = winnersHistory.length + 1 === prizes.length;
         const slowMoDuration = isFinalPrize && isFinalWinnerOfBatch ? 14000 : 4000;
+        let finished = false;
+
+        const finishAnimation = () => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timeoutRef.current);
+            resolve();
+        };
+
+        // Safety net for intermittent timer drift issues that could keep the final draw hanging.
+        timeoutRef.current = setTimeout(() => {
+            setDisplayValue(String(winnerEntry));
+            finishAnimation();
+        }, slowMoDuration + 5000);
         
         const animationStart = Date.now();
         
@@ -652,7 +666,7 @@ const HostView = () => {
                 const elapsed = Date.now() - animationStart;
                 if (elapsed >= slowMoDuration) {
                     setDisplayValue(winnerEntry);
-                    resolve();
+                    finishAnimation();
                     return;
                 }
                 setDisplayValue(initialEntries[Math.floor(Math.random() * initialEntries.length)]);
@@ -665,60 +679,63 @@ const HostView = () => {
             nameAnimationLoop();
         } else {
             const winnerDigits = getDigits(winnerEntry);
-            const lockTimings = Array.from({ length: maxDigits - 1 }, (_, i) => 800 + i * 400);
-            const slowMoStartTime = lockTimings[lockTimings.length - 1] || 800;
+            const reelConfigs = winnerDigits.map((_, index) => {
+                const start = index * 550;
+                const duration = isFinalPrize && isFinalWinnerOfBatch
+                    ? 2800 + index * 650
+                    : 1300 + index * 350;
+                return { start, duration };
+            });
+            const animationTotalDuration = reelConfigs.reduce(
+                (maxDuration, reel) => Math.max(maxDuration, reel.start + reel.duration),
+                0,
+            );
             
             const animationLoop = () => {
                 const elapsed = Date.now() - animationStart;
                 let nextDelay = 75;
 
-                if (elapsed < slowMoStartTime) {
-                    const newDisplayDigits = winnerDigits.map((digit, index) => {
-                        if (index >= maxDigits - 1) return Math.floor(Math.random() * 10);
-                        if (elapsed >= lockTimings[index]) return digit;
-                        return Math.floor(Math.random() * 10);
-                    });
-                    setDisplayValue(newDisplayDigits.join(''));
-                    if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "8n");
-                } else {
-                    const slowMoElapsed = elapsed - slowMoStartTime;
-                    if (slowMoElapsed >= slowMoDuration) {
-                        setDisplayValue(winnerDigits.join(''));
-                        resolve();
-                        return;
-                    }
-                    
-                    if (isFinalPrize && slowMoElapsed >= slowMoDuration - 2000 && !almostTriggered.current) {
-                        almostTriggered.current = true;
-                        let fakeDigit = Math.floor(Math.random() * 10);
-                        const finalWinnerDigit = parseInt(winnerDigits[maxDigits - 1], 10);
-                        while (fakeDigit === finalWinnerDigit) {
-                            fakeDigit = Math.floor(Math.random() * 10);
-                        }
-                        
-                        const newDisplayDigits = [...winnerDigits];
-                        newDisplayDigits[maxDigits - 1] = fakeDigit;
-                        setDisplayValue(newDisplayDigits.join(''));
-        
-                        timeoutRef.current = setTimeout(() => {
-                            timeoutRef.current = setTimeout(animationLoop, 50);
-                        }, 800);
-                        return;
-                    }
-
-                    const newDisplayDigits = [...winnerDigits];
-                    const finalDigitIndex = maxDigits - 1;
-                    const progress = slowMoElapsed / slowMoDuration;
-                    const easing = 1 - Math.pow(1 - progress, 2);
-                    const totalSteps = 10;
-                    const currentStep = Math.floor(easing * totalSteps);
-                    const finalDigit = parseInt(winnerDigits[finalDigitIndex], 10);
-                    newDisplayDigits[finalDigitIndex] = (finalDigit + totalSteps - currentStep) % 10;
-                    setDisplayValue(newDisplayDigits.join(''));
-                    
-                    if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "8n");
-                    nextDelay = 50 + easing * 400;
+                if (elapsed >= animationTotalDuration + (isFinalPrize ? 700 : 300)) {
+                    setDisplayValue(winnerDigits.join(''));
+                    finishAnimation();
+                    return;
                 }
+
+                const newDisplayDigits = winnerDigits.map((digit, index) => {
+                    const reel = reelConfigs[index];
+
+                    if (elapsed < reel.start) return Math.floor(Math.random() * 10);
+
+                    const reelElapsed = elapsed - reel.start;
+                    if (reelElapsed >= reel.duration) return digit;
+
+                    const progress = reelElapsed / reel.duration;
+                    const easing = 1 - Math.pow(1 - progress, 3);
+                    const totalSteps = isFinalPrize ? 24 : 14;
+                    const currentStep = Math.floor(easing * totalSteps);
+                    const finalDigit = parseInt(digit, 10);
+                    return Number.isNaN(finalDigit)
+                        ? digit
+                        : (finalDigit + totalSteps - currentStep) % 10;
+                });
+
+                if (isFinalPrize && !almostTriggered.current && elapsed >= animationTotalDuration - 1100) {
+                    almostTriggered.current = true;
+                    const finalDigitIndex = maxDigits - 1;
+                    const finalDigit = parseInt(winnerDigits[finalDigitIndex], 10);
+                    if (!Number.isNaN(finalDigit)) {
+                        newDisplayDigits[finalDigitIndex] = (finalDigit + 1) % 10;
+                    }
+                    setDisplayValue(newDisplayDigits.join(''));
+                    timeoutRef.current = setTimeout(animationLoop, 550);
+                    return;
+                }
+
+                setDisplayValue(newDisplayDigits.join(''));
+                if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "16n");
+
+                const globalProgress = Math.min(1, elapsed / animationTotalDuration);
+                nextDelay = 40 + globalProgress * 170;
                 timeoutRef.current = setTimeout(animationLoop, nextDelay);
             };
             animationLoop();
@@ -1208,33 +1225,35 @@ const HostView = () => {
         </div>
       </div>
       
-      {winnersHistory.length > 0 && (
-          <div className="w-full max-w-md bg-[var(--panel-bg)] backdrop-blur-sm p-4 rounded-xl shadow-lg mt-4 z-10 border border-[var(--panel-border)]">
-              <h2 className="text-2xl font-bold text-center mb-4" style={{color: 'var(--title-color)'}}>Draw History</h2>
-              <ul className="space-y-2">
-                  {winnersHistory.slice().reverse().map((winnerGroup) => (
-                      <li key={winnerGroup.prize} className="p-3 rounded-lg" style={{backgroundColor: 'var(--display-bg)'}}>
-                          <span className="font-bold text-lg">{winnerGroup.prize}:</span>
-                          <div className="pl-4 mt-1 space-y-1">
-                            {winnerGroup.tickets.map(ticket => (
-                                <div key={ticket} className="flex justify-between items-center">
-                                    <span className="font-mono" style={{color: 'var(--display-text)'}}>{ticket}</span>
-                                    <Button onClick={() => setWinnerToExport({prize: winnerGroup.prize, ticket})} disabled={!scriptsLoaded.htmlToImage} className="text-xs py-1 px-2" style={{backgroundColor: 'var(--button-primary-bg)'}}>
-                                        {scriptsLoaded.htmlToImage ? 'Export' : '...'}
-                                    </Button>
-                                </div>
-                            ))}
-                          </div>
-                      </li>
-                  ))}
-              </ul>
-              <div className="flex justify-center items-center gap-4 mt-4">
-                <Button onClick={handleUndo} disabled={drawing || winnersHistory.length === 0} className="!bg-red-600 hover:!bg-red-700">Undo Last Draw</Button>
-                <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700">Export All</Button>
-                <Button onClick={() => resetDraw()} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Reset Draw</Button>
-              </div>
-          </div>
-      )}
+      <aside className="fixed right-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col">
+        <h2 className="text-2xl font-bold text-center mb-3" style={{color: 'var(--title-color)'}}>Draw History</h2>
+        {winnersHistory.length > 0 ? (
+          <ul className="space-y-2 overflow-y-auto pr-1 flex-1">
+              {winnersHistory.slice().reverse().map((winnerGroup) => (
+                  <li key={winnerGroup.prize} className="p-3 rounded-lg" style={{backgroundColor: 'var(--display-bg)'}}>
+                      <span className="font-bold text-lg">{winnerGroup.prize}:</span>
+                      <div className="pl-4 mt-1 space-y-1">
+                        {winnerGroup.tickets.map(ticket => (
+                            <div key={ticket} className="flex justify-between items-center gap-3">
+                                <span className="font-mono" style={{color: 'var(--display-text)'}}>{ticket}</span>
+                                <Button onClick={() => setWinnerToExport({prize: winnerGroup.prize, ticket})} disabled={!scriptsLoaded.htmlToImage} className="text-xs py-1 px-2 shrink-0" style={{backgroundColor: 'var(--button-primary-bg)'}}>
+                                    {scriptsLoaded.htmlToImage ? 'Export' : '...'}
+                                </Button>
+                            </div>
+                        ))}
+                      </div>
+                  </li>
+              ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-center mt-3" style={{color: 'var(--text-muted)'}}>No winners yet. Start drawing to populate this sidebar.</p>
+        )}
+        <div className="grid grid-cols-1 gap-2 mt-3">
+          <Button onClick={handleUndo} disabled={drawing || winnersHistory.length === 0} className="!bg-red-600 hover:!bg-red-700">Undo Last Draw</Button>
+          <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700">Export All</Button>
+          <Button onClick={() => resetDraw()} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Reset Draw</Button>
+        </div>
+      </aside>
 
       {/* Hidden components for PNG export */}
       <div className="absolute -left-full -top-full">
