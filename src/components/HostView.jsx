@@ -8,6 +8,7 @@ import { parseEntries, parseEntriesFromCsv } from '../utils/parseEntries';
 import { downloadJson } from '../utils/exportUtils';
 import { isValidSessionData } from '../utils/validation';
 import { getPaddedDigits } from '../hooks/useDrawEngine';
+import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '../utils/drawModes';
 
 export default function HostView() {
   const [maxDigits, setMaxDigits] = useState(2);
@@ -67,6 +68,14 @@ export default function HostView() {
   const [duplicateGroups, setDuplicateGroups] = useState([]);
   const [blankEntriesRemoved, setBlankEntriesRemoved] = useState(0);
   const [participantSearch, setParticipantSearch] = useState('');
+  const [operationMode, setOperationMode] = useState('standard');
+  const [teamCount, setTeamCount] = useState(2);
+  const [roleConfigText, setRoleConfigText] = useState('Host:1\nJudge:2');
+  const [allowMultipleRoles, setAllowMultipleRoles] = useState(false);
+  const [winnerEligibilityMode, setWinnerEligibilityMode] = useState('remove');
+  const [noRepeatAcrossPrizes, setNoRepeatAcrossPrizes] = useState(false);
+  const [auditLog, setAuditLog] = useState([]);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
 
   // Refs
   const timeoutRef = useRef(null);
@@ -103,7 +112,9 @@ export default function HostView() {
     titleColor, subtitleColor, titleFont, subtitleFont,
     titleFontSize, subtitleFontSize, drawMode,
     displayFont, displayFontSize, displayLineHeight, displayLetterSpacing,
-    displayBoxWidth, displayBoxHeight
+    displayBoxWidth, displayBoxHeight,
+    operationMode, teamCount, roleConfigText, allowMultipleRoles,
+    winnerEligibilityMode, noRepeatAcrossPrizes, auditLog
   };
 
   useSessionStorage('lucky-draw-autosave', appState);
@@ -148,6 +159,13 @@ export default function HostView() {
         setDisplayBoxWidth(data.displayBoxWidth || 480);
         setDisplayBoxHeight(data.displayBoxHeight || 180);
         setDrawMode(data.drawMode || 'numbers');
+        setOperationMode(data.operationMode || 'standard');
+        setTeamCount(data.teamCount || 2);
+        setRoleConfigText(data.roleConfigText || 'Host:1\nJudge:2');
+        setAllowMultipleRoles(Boolean(data.allowMultipleRoles));
+        setWinnerEligibilityMode(data.winnerEligibilityMode || 'remove');
+        setNoRepeatAcrossPrizes(Boolean(data.noRepeatAcrossPrizes));
+        setAuditLog(Array.isArray(data.auditLog) ? data.auditLog : []);
         const firstEntry = (data.remainingEntries && data.remainingEntries[0]) || (data.initialEntries && data.initialEntries[0]) || '1';
         setDisplayValue(firstEntry);
         setSuccessMessage('Session restored successfully!');
@@ -247,17 +265,28 @@ export default function HostView() {
     setRemainingEntries(entriesToUse);
     setWinnersHistory([]);
     const firstEntry = entriesToUse[0] || (drawMode === 'numbers' ? '1' : 'Winner');
+    setAuditLog([]);
     setDisplayValue(firstEntry);
     setError('');
     setShowConfetti(false);
   };
   
   const handleUndo = () => {
-    if (winnersHistory.length === 0 || drawing) return;
-    const lastWinnerGroup = winnersHistory[winnersHistory.length - 1];
-    setWinnersHistory(winnersHistory.slice(0, -1));
-    setRemainingEntries([...remainingEntries, ...lastWinnerGroup.tickets].sort());
-    setDisplayValue(lastWinnerGroup.tickets[0]);
+    if (auditLog.length === 0 || drawing) return;
+    const lastEntry = auditLog[auditLog.length - 1];
+    setAuditLog(auditLog.slice(0, -1));
+
+    if (lastEntry.mode === 'standard') {
+      const lastWinnerGroup = winnersHistory[winnersHistory.length - 1];
+      if (!lastWinnerGroup) return;
+      setWinnersHistory(winnersHistory.slice(0, -1));
+      const restored = [...remainingEntries, ...lastWinnerGroup.tickets];
+      setRemainingEntries(Array.from(new Set(restored)).sort());
+      setDisplayValue(lastWinnerGroup.tickets[0]);
+    } else {
+      setDisplayValue(initialEntries[0] || 'Ready');
+    }
+
     setError('');
   };
 
@@ -271,7 +300,9 @@ export default function HostView() {
         backgroundImage, masterVolume, sfxVolume, musicVolume,
         titleColor, subtitleColor, titleFont, subtitleFont, drawMode,
         displayFont, displayFontSize, displayLineHeight, displayLetterSpacing,
-        displayBoxWidth, displayBoxHeight
+        displayBoxWidth, displayBoxHeight,
+        operationMode, teamCount, roleConfigText, allowMultipleRoles,
+        winnerEligibilityMode, noRepeatAcrossPrizes, auditLog
     };
     downloadJson('lucky-draw-session.json', appState);
   };
@@ -570,10 +601,52 @@ export default function HostView() {
     });
   };
 
+  const parseRoleRules = () => roleConfigText
+    .split(/\n|,/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, count] = line.split(':');
+      return { name: (name || '').trim(), count: Number.parseInt((count || '').trim(), 10) || 0 };
+    })
+    .filter((role) => role.name && role.count > 0);
+
   const drawNextWinner = async () => {
-    const numToDraw = Math.min(winnersPerPrize, remainingEntries.length);
+    if (operationMode !== 'standard') {
+      const blocked = noRepeatAcrossPrizes ? getNoRepeatSet(auditLog) : new Set();
+      const eligible = initialEntries.filter((entry) => !blocked.has(entry));
+      if (eligible.length === 0) {
+        setError('No eligible participants left for this mode.');
+        return;
+      }
+
+      if (operationMode === 'team-divider') {
+        const teams = divideIntoTeams(eligible, teamCount);
+        const selected = teams.flatMap((team) => team.members);
+        setDisplayValue(`Created ${teams.length} teams`);
+        setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'team-divider', context: `${teams.length} teams`, selected, remainingCount: eligible.length })]);
+        setCurrentPrize(`Team Divider (${teams.length} teams)`);
+        return;
+      }
+
+      const roleRules = parseRoleRules();
+      if (roleRules.length === 0) {
+        setError('Add at least one valid role in Role:Count format.');
+        return;
+      }
+      const assignments = assignRoles(eligible, roleRules, { allowMultipleRoles });
+      const selected = assignments.flatMap((role) => role.participants);
+      setDisplayValue(`Assigned ${selected.length} roles`);
+      setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'role-selector', context: `${assignments.length} roles`, selected, remainingCount: eligible.length })]);
+      setCurrentPrize('Role Selector');
+      return;
+    }
+
+    const blocked = noRepeatAcrossPrizes ? getNoRepeatSet(auditLog) : new Set();
+    const sourcePool = remainingEntries.filter((entry) => !blocked.has(entry));
+    const numToDraw = Math.min(winnersPerPrize, sourcePool.length);
     if (drawing || numToDraw === 0 || winnersHistory.length >= prizes.length) {
-        if (remainingEntries.length === 0) setError('All entries have been drawn!');
+        if (sourcePool.length === 0) setError('All entries have been drawn!');
         if (winnersHistory.length >= prizes.length) setError('All prizes have been awarded!');
         return;
     }
@@ -582,49 +655,34 @@ export default function HostView() {
     setError('');
     setShowConfetti(false);
     setPulse(true);
-    
+
     const currentPrizeName = getPrizeName();
     setCurrentPrize(currentPrizeName);
 
     const drawnTickets = [];
-    let tempRemaining = [...remainingEntries];
+    let tempPool = [...sourcePool];
     for(let i = 0; i < numToDraw; i++) {
-        const winnerIndex = Math.floor(Math.random() * tempRemaining.length);
-        drawnTickets.push(tempRemaining.splice(winnerIndex, 1)[0]);
+        const winnerIndex = Math.floor(Math.random() * tempPool.length);
+        drawnTickets.push(tempPool.splice(winnerIndex, 1)[0]);
     }
 
     for (let i = 0; i < drawnTickets.length; i++) {
         const ticket = drawnTickets[i];
         const isFinalWinnerOfBatch = i === drawnTickets.length - 1;
         await runSingleWinnerAnimation(ticket, isFinalWinnerOfBatch);
-        if (isFinalWinnerOfBatch) {
-             const isFinalPrize = winnersHistory.length + 1 === prizes.length;
-             if (winSynth.current) {
-                const now = window.Tone.now();
-                if (isFinalPrize) {
-                    fireworkWhoosh.current.triggerAttack(now);
-                    for(let i = 0; i < 10; i++) {
-                       fireworkCrackle.current.triggerAttackRelease("16n", now + 0.3 + Math.random() * 0.5);
-                    }
-                    winSynth.current.triggerAttackRelease(["C4", "G4", "C5", "E5"], "2s", now + 0.8);
-                    winSynth.current.triggerAttackRelease(["F4", "A4", "C5", "F5"], "2s", now + 1.8);
-                    winSynth.current.triggerAttackRelease(["G4", "B4", "D5", "G5"], "3s", now + 2.8);
-                    playCelebration();
-                } else {
-                    winSynth.current.triggerAttackRelease(["C4", "E4", "G4"], "1s");
-                    playCelebration();
-                }
-            }
-            setShowConfetti(true);
-            setTimeout(() => setShowConfetti(false), 5000);
-        } else {
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Pause between reveals
-        }
     }
 
     const newHistory = [...winnersHistory, { prize: currentPrizeName, tickets: drawnTickets }];
     setWinnersHistory(newHistory);
-    setRemainingEntries(tempRemaining);
+
+    const nextRemaining = winnerEligibilityMode === 'keep'
+      ? remainingEntries
+      : remainingEntries.filter((entry) => !drawnTickets.includes(entry));
+
+    setRemainingEntries(nextRemaining);
+    setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'standard', context: currentPrizeName, selected: drawnTickets, remainingCount: nextRemaining.length })]);
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 5000);
     setDrawing(false);
   };
 
@@ -879,6 +937,11 @@ export default function HostView() {
                                 </div>
                             </div>
                             <div>
+                                <label className="font-semibold text-sm mb-1 block">Participant Type</label>
+                                <select value={drawMode} onChange={(e) => setDrawMode(e.target.value)} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm mb-2">
+                                    <option value="numbers">Numbers</option>
+                                    <option value="names">Names</option>
+                                </select>
                                 <label className="font-semibold text-sm mb-1 block">Participants</label>
                                 <div className="flex items-center gap-2">
                                     <Input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={drawMode === 'numbers' ? 'e.g., 001-100, 001, 007 or mixed lines/commas' : 'e.g., Alice, Bob or one name per line'} className="flex-grow bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
@@ -937,6 +1000,45 @@ export default function HostView() {
                                       )}
                                     </div>
                                   )}
+                            </div>
+                            <div className="p-3 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/30 space-y-3">
+                                <label className="font-semibold text-sm mb-1 block">Operation Mode</label>
+                                <select value={operationMode} onChange={(e) => setOperationMode(e.target.value)} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm">
+                                    <option value="standard">Standard Draw</option>
+                                    <option value="team-divider">Team Divider</option>
+                                    <option value="role-selector">Role Selector</option>
+                                </select>
+                                {operationMode === 'team-divider' && (
+                                  <div>
+                                    <label className="text-xs mt-1 block">Number of Teams</label>
+                                    <Input type="number" min="2" value={teamCount} onChange={(e) => setTeamCount(Math.max(2, parseInt(e.target.value, 10) || 2))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                  </div>
+                                )}
+                                {operationMode === 'role-selector' && (
+                                  <div className="space-y-2">
+                                    <label className="text-xs mt-1 block">Roles (one per line: Role:Count)</label>
+                                    <textarea value={roleConfigText} onChange={(e) => setRoleConfigText(e.target.value)} rows={4} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm" />
+                                    <label className="flex items-center gap-2 text-xs">
+                                      <input type="checkbox" checked={allowMultipleRoles} onChange={(e) => setAllowMultipleRoles(e.target.checked)} />
+                                      Allow same participant to receive multiple roles
+                                    </label>
+                                  </div>
+                                )}
+                                <div className="pt-2 border-t border-[var(--panel-border)] space-y-2">
+                                  <p className="text-xs font-semibold">Fairness Controls</p>
+                                  <label className="flex items-center gap-2 text-xs">
+                                    <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'remove'} onChange={() => setWinnerEligibilityMode('remove')} />
+                                    Remove winner from future rounds
+                                  </label>
+                                  <label className="flex items-center gap-2 text-xs">
+                                    <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'keep'} onChange={() => setWinnerEligibilityMode('keep')} />
+                                    Keep winner eligible
+                                  </label>
+                                  <label className="flex items-center gap-2 text-xs">
+                                    <input type="checkbox" checked={noRepeatAcrossPrizes} onChange={(e) => setNoRepeatAcrossPrizes(e.target.checked)} />
+                                    No repeat across prizes/modes
+                                  </label>
+                                </div>
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Prizes</label>
@@ -1043,7 +1145,7 @@ export default function HostView() {
             transition={pulse ? {duration: 0.8, ease: 'easeInOut'} : {}}
             onAnimationComplete={() => setPulse(false)}
         >
-            {drawMode === 'numbers' ? (
+            {operationMode === 'standard' && drawMode === 'numbers' ? (
                 <div className="flex items-center font-bold" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: `clamp(2.25rem, ${displayFontSize / 16}rem, 8.5rem)`, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, fontVariantNumeric: 'tabular-nums lining-nums'}}>
                     {getDigits(displayValue).map((digit, index) => (
                         <div key={index} className="w-[1ch] text-center overflow-hidden">
@@ -1089,46 +1191,43 @@ export default function HostView() {
             )}
             </AnimatePresence>
             <Button 
-                onMouseDown={startCharging}
-                onMouseUp={stopCharging}
-                onMouseLeave={stopCharging}
-                onTouchStart={startCharging}
-                onTouchEnd={stopCharging}
-                disabled={drawing || remainingEntries.length === 0 || winnersHistory.length >= prizes.length} 
-                className="w-full px-10 py-4 text-xl text-black" 
+                onMouseDown={operationMode === 'standard' ? startCharging : undefined}
+                onMouseUp={operationMode === 'standard' ? stopCharging : undefined}
+                onMouseLeave={operationMode === 'standard' ? stopCharging : undefined}
+                onTouchStart={operationMode === 'standard' ? startCharging : undefined}
+                onTouchEnd={operationMode === 'standard' ? stopCharging : undefined}
+                onClick={operationMode === 'standard' ? undefined : drawNextWinner}
+                disabled={drawing || (operationMode === 'standard' && remainingEntries.length === 0) || (operationMode === 'standard' && winnersHistory.length >= prizes.length)} 
+                className="w-full px-6 py-3 sm:px-10 sm:py-4 text-base sm:text-xl text-black" 
                 style={{backgroundColor: 'var(--button-action-bg)'}}
             >
-              {isCharging ? "Charging..." : "Hold to Draw"}
+              {operationMode === 'standard' ? (isCharging ? "Charging..." : "Hold to Draw") : 'Run Assignment'}
             </Button>
         </div>
       </div>
       
-      <aside className="fixed right-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col">
-        <h2 className="text-2xl font-bold text-center mb-3" style={{color: 'var(--title-color)'}}>Draw History</h2>
-        {winnersHistory.length > 0 ? (
-          <ul className="space-y-2 overflow-y-auto pr-1 flex-1">
-              {winnersHistory.slice().reverse().map((winnerGroup) => (
-                  <li key={winnerGroup.prize} className="p-3 rounded-lg" style={{backgroundColor: 'var(--display-bg)'}}>
-                      <span className="font-bold text-lg">{winnerGroup.prize}:</span>
-                      <div className="pl-4 mt-1 space-y-1">
-                        {winnerGroup.tickets.map(ticket => (
-                            <div key={ticket} className="flex justify-between items-center gap-3">
-                                <span className="font-mono" style={{color: 'var(--display-text)'}}>{ticket}</span>
-                                <Button onClick={() => setWinnerToExport({prize: winnerGroup.prize, ticket})} disabled={!scriptsLoaded.htmlToImage} className="text-xs py-1 px-2 shrink-0" style={{backgroundColor: 'var(--button-primary-bg)'}}>
-                                    {scriptsLoaded.htmlToImage ? 'Export' : '...'}
-                                </Button>
-                            </div>
-                        ))}
-                      </div>
-                  </li>
-              ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-center mt-3" style={{color: 'var(--text-muted)'}}>No winners yet. Start drawing to populate this sidebar.</p>
-        )}
+      <aside className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform ${historyPanelOpen ? 'translate-x-0' : '-translate-x-[86%] sm:-translate-x-[88%]'}`}>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="text-lg sm:text-2xl font-bold" style={{color: 'var(--title-color)'}}>History & Audit</h2>
+          <Button onClick={() => setHistoryPanelOpen((prev) => !prev)} className="!bg-gray-700 text-xs sm:text-sm">
+            {historyPanelOpen ? 'Hide' : 'Show'}
+          </Button>
+        </div>
+        <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+          {auditLog.length > 0 ? auditLog.slice().reverse().map((entry) => (
+            <details key={entry.id} className="p-2 rounded-lg" style={{backgroundColor: 'var(--display-bg)'}}>
+              <summary className="cursor-pointer text-sm font-semibold">
+                {entry.mode} · {entry.context}
+              </summary>
+              <p className="text-xs mt-1" style={{color: 'var(--text-muted)'}}>{new Date(entry.timestamp).toLocaleString()}</p>
+              <p className="text-xs mt-1">Selected: {entry.selected.join(', ') || 'None'}</p>
+              {typeof entry.remainingCount === 'number' && <p className="text-xs">Remaining: {entry.remainingCount}</p>}
+            </details>
+          )) : <p className="text-xs sm:text-sm text-center mt-3" style={{color: 'var(--text-muted)'}}>No history yet.</p>}
+        </div>
         <div className="grid grid-cols-1 gap-2 mt-3">
-          <Button onClick={handleUndo} disabled={drawing || winnersHistory.length === 0} className="!bg-red-600 hover:!bg-red-700">Undo Last Draw</Button>
-          <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700">Export All</Button>
+          <Button onClick={handleUndo} disabled={drawing || auditLog.length === 0} className="!bg-red-600 hover:!bg-red-700">Undo Last</Button>
+          <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700">Export Winners</Button>
           <Button onClick={() => resetDraw()} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Reset Draw</Button>
         </div>
       </aside>
