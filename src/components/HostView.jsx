@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as Tone from 'tone';
+import * as htmlToImage from 'html-to-image';
+import QRCode from 'qrcodejs2';
 import { themes, fonts } from '../utils/themeConfig';
 import { Button, Input, ConfettiParticle } from './ui';
 import { useSessionStorage } from '../hooks/useSessionStorage';
@@ -197,29 +200,27 @@ export default function HostView() {
   };
 
   // Script and Audio Setup
-  useAudioEngine({ scriptsLoaded, setScriptsLoaded, setError });
+  useAudioEngine({ setScriptsLoaded });
 
   useEffect(() => {
     if (scriptsLoaded.tone && !tickSynth.current) {
-        sfxVolumeNode.current = new window.Tone.Volume(sfxVolume).toDestination();
-        musicVolumeNode.current = new window.Tone.Volume(musicVolume).toDestination();
-        
-        tickSynth.current = new window.Tone.MembraneSynth().connect(sfxVolumeNode.current);
-        fireworkWhoosh.current = new window.Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.005, decay: 0.3, sustain: 0 } }).connect(sfxVolumeNode.current);
-        fireworkCrackle.current = new window.Tone.MetalSynth({ frequency: 200, envelope: { attack: 0.001, decay: 0.1, release: 0.01 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(sfxVolumeNode.current);
-        drumrollSynth.current = new window.Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(sfxVolumeNode.current);
-        
-        winSynth.current = new window.Tone.PolySynth(window.Tone.Synth).connect(musicVolumeNode.current);
-        applauseSynth.current = new window.Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0 }}).connect(sfxVolumeNode.current);
-        whistleSynth.current = new window.Tone.Synth({ oscillator: { type: 'triangle8' }, envelope: { attack: 0.01, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(sfxVolumeNode.current);
-        wowSynth.current = new window.Tone.FMSynth({ harmonicity: 2, modulationIndex: 8, envelope: { attack: 0.03, decay: 0.2, sustain: 0.08, release: 0.4 } }).connect(sfxVolumeNode.current);
+        sfxVolumeNode.current = new Tone.Volume(sfxVolume).toDestination();
+        musicVolumeNode.current = new Tone.Volume(musicVolume).toDestination();
+
+        tickSynth.current = new Tone.MembraneSynth().connect(sfxVolumeNode.current);
+        fireworkWhoosh.current = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.005, decay: 0.3, sustain: 0 } }).connect(sfxVolumeNode.current);
+        fireworkCrackle.current = new Tone.MetalSynth({ frequency: 200, envelope: { attack: 0.001, decay: 0.1, release: 0.01 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(sfxVolumeNode.current);
+        drumrollSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(sfxVolumeNode.current);
+
+        winSynth.current = new Tone.PolySynth(Tone.Synth).connect(musicVolumeNode.current);
+        applauseSynth.current = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0 }}).connect(sfxVolumeNode.current);
+        whistleSynth.current = new Tone.Synth({ oscillator: { type: 'triangle8' }, envelope: { attack: 0.01, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(sfxVolumeNode.current);
+        wowSynth.current = new Tone.FMSynth({ harmonicity: 2, modulationIndex: 8, envelope: { attack: 0.03, decay: 0.2, sustain: 0.08, release: 0.4 } }).connect(sfxVolumeNode.current);
     }
   }, [scriptsLoaded.tone, sfxVolume, musicVolume]);
 
   useEffect(() => {
-    if(window.Tone) {
-        window.Tone.Destination.volume.value = masterVolume;
-    }
+    Tone.Destination.volume.value = masterVolume;
   }, [masterVolume]);
 
   useEffect(() => {
@@ -238,7 +239,7 @@ export default function HostView() {
   useEffect(() => {
     if (settingsTab === 'jumbotron' && scriptsLoaded.qrcode && qrCodeRef.current) {
         qrCodeRef.current.innerHTML = '';
-        new window.QRCode(qrCodeRef.current, {
+        new QRCode(qrCodeRef.current, {
             text: window.location.href + '?view=public',
             width: 192,
             height: 192,
@@ -510,7 +511,7 @@ export default function HostView() {
   
   const playDrumroll = () => {
     if (drumrollSynth.current) {
-        const now = window.Tone.now();
+        const now = Tone.now();
         drumrollSynth.current.triggerAttack("C2", now);
         drumrollSynth.current.triggerAttack("C2", now + 0.05);
         drumrollSynth.current.triggerAttack("G1", now + 0.1);
@@ -528,7 +529,7 @@ export default function HostView() {
   };
 
   const playCelebration = () => {
-    const now = window.Tone?.now?.() ?? 0;
+    const now = Tone.now();
     if (whistleSynth.current) {
       whistleSynth.current.triggerAttackRelease('A5', '16n', now);
       whistleSynth.current.triggerAttackRelease('C6', '8n', now + 0.12);
@@ -544,7 +545,7 @@ export default function HostView() {
     if (drawing || remainingEntries.length === 0 || winnersHistory.length >= prizes.length) return;
     
     if (scriptsLoaded.tone && !audioStarted.current) {
-        await window.Tone.start();
+        await Tone.start();
         audioStarted.current = true;
     }
 
@@ -788,10 +789,10 @@ export default function HostView() {
   }, [showSettings]);
 
   useEffect(() => {
-    if (winnerToExport && exportRef.current && window.htmlToImage) {
+    if (winnerToExport && exportRef.current) {
         const exportImage = async () => {
             try {
-                const dataUrl = await window.htmlToImage.toPng(exportRef.current, {
+                const dataUrl = await htmlToImage.toPng(exportRef.current, {
                     style: { margin: '0', padding: '0' },
                     width: 500,
                     height: 300,
@@ -811,10 +812,10 @@ export default function HostView() {
   }, [winnerToExport]);
 
   useEffect(() => {
-    if (exportAllTrigger && exportAllRef.current && window.htmlToImage) {
+    if (exportAllTrigger && exportAllRef.current) {
         const exportAllImage = async () => {
              try {
-                const dataUrl = await window.htmlToImage.toPng(exportAllRef.current, {
+                const dataUrl = await htmlToImage.toPng(exportAllRef.current, {
                     quality: 0.95,
                     backgroundColor: themes[theme]['--bg-color'],
                 });
@@ -1316,12 +1317,34 @@ export default function HostView() {
         </div>
       </div>
       
-      <aside className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform ${historyPanelOpen ? 'translate-x-0' : '-translate-x-[86%] sm:-translate-x-[88%]'}`}>
+      {/* Floating button to re-open history panel when minimized */}
+      {!historyPanelOpen && (
+        <button
+          onClick={() => setHistoryPanelOpen(true)}
+          className="fixed left-3 top-28 z-20 flex flex-col items-center justify-center gap-1 px-2 py-3 rounded-lg shadow-lg text-xs font-bold"
+          style={{ backgroundColor: 'var(--panel-bg)', color: 'var(--title-color)', border: '1px solid var(--panel-border)' }}
+          title="Show History & Audit"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed', transform: 'rotate(180deg)', fontSize: '10px' }}>History</span>
+        </button>
+      )}
+
+      <aside className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform duration-300 ${historyPanelOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}`}>
         <div className="flex items-center justify-between gap-2 mb-3">
           <h2 className="text-lg sm:text-2xl font-bold" style={{color: 'var(--title-color)'}}>History & Audit</h2>
-          <Button onClick={() => setHistoryPanelOpen((prev) => !prev)} className="!bg-gray-700 text-xs sm:text-sm">
-            {historyPanelOpen ? 'Hide' : 'Show'}
-          </Button>
+          <button
+            onClick={() => setHistoryPanelOpen(false)}
+            className="flex items-center justify-center w-7 h-7 rounded-md hover:opacity-80 transition-opacity"
+            style={{ backgroundColor: 'var(--display-bg)', color: 'var(--text-muted)' }}
+            title="Minimize"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+            </svg>
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto pr-1 space-y-2">
           {auditLog.length > 0 ? auditLog.slice().reverse().map((entry) => (
@@ -1351,8 +1374,8 @@ export default function HostView() {
         </div>
       </aside>
 
-      {/* Hidden components for PNG export */}
-      <div className="absolute -left-full -top-full">
+      {/* Hidden components for PNG export — positioned far off-screen so layout renders at full size */}
+      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', pointerEvents: 'none' }}>
          <div ref={exportRef}>
             {winnerToExport && (
                  <div style={{width: 500, height: 300, ...themes[theme]}} className="flex flex-col items-center justify-center p-8 relative bg-[var(--display-bg)] text-[var(--text-color)]">
@@ -1365,15 +1388,17 @@ export default function HostView() {
          </div>
          <div ref={exportAllRef}>
             {exportAllTrigger && (
-                 <div style={{...themes[theme]}} className="p-8 bg-[var(--bg-color)] text-[var(--text-color)]">
-                     {logo && <img src={logo} alt="Logo" className="h-20 w-auto mb-6" />}
-                     <h2 className="text-4xl font-bold mb-6" style={{color: 'var(--title-color)'}}>{title} - Winners</h2>
-                     <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                 <div style={{ width: 900, padding: 40, boxSizing: 'border-box', ...themes[theme] }}>
+                     {logo && <img src={logo} alt="Logo" style={{ height: 80, width: 'auto', marginBottom: 24 }} />}
+                     <h2 style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 24, color: themes[theme]['--title-color'] }}>{title} - Winners</h2>
+                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px 32px' }}>
                         {winnersHistory.map(group => (
                             <div key={group.prize}>
-                                <h3 className="text-2xl font-bold border-b-2" style={{borderColor: 'var(--panel-border)'}}>{group.prize}</h3>
-                                <ul className="mt-2 space-y-1">
-                                    {group.tickets.map(ticket => <li key={ticket} className="font-mono text-xl" style={{color: 'var(--display-text)'}}>{ticket}</li>)}
+                                <h3 style={{ fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{group.prize}</h3>
+                                <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                                    {group.tickets.map(ticket => (
+                                      <li key={ticket} style={{ fontFamily: 'monospace', fontSize: 18, marginBottom: 4, color: themes[theme]['--display-text'] }}>{ticket}</li>
+                                    ))}
                                 </ul>
                             </div>
                         ))}
