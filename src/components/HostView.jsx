@@ -5,10 +5,30 @@ import { Button, Input, ConfettiParticle } from './ui';
 import { useSessionStorage } from '../hooks/useSessionStorage';
 import { useAudioEngine } from '../hooks/useAudioEngine';
 import { parseEntries, parseEntriesFromCsv } from '../utils/parseEntries';
-import { downloadJson } from '../utils/exportUtils';
-import { isValidSessionData } from '../utils/validation';
+import { downloadJson, downloadCsv, buildWinnersCsvRows, buildAuditLogCsvRows } from '../utils/exportUtils';
+import { isValidSessionData, parseSessionJson } from '../utils/validation';
+import { sessionTemplates } from '../utils/sessionTemplates';
 import { getPaddedDigits } from '../hooks/useDrawEngine';
 import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '../utils/drawModes';
+
+const DISPLAY_DEFAULTS = {
+  titleFont: 'sans-serif',
+  titleFontSize: 48,
+  titleLineSpacing: 1.2,
+  titleLetterSpacing: 0,
+  subtitleFont: 'sans-serif',
+  subtitleFontSize: 16,
+  subtitleLineSpacing: 1.5,
+  subtitleLetterSpacing: 0,
+  displayFont: "'Roboto Mono', 'Noto Sans Myanmar', monospace",
+  displayFontSize: 92,
+  displayLineHeight: 1.02,
+  displayLetterSpacing: 0.1,
+  displayBoxWidth: 480,
+  displayBoxHeight: 180,
+};
+
+const AUDIO_DEFAULTS = { masterVolume: 0, sfxVolume: -6, musicVolume: 0 };
 
 export default function HostView() {
   const [maxDigits, setMaxDigits] = useState(2);
@@ -307,17 +327,73 @@ export default function HostView() {
     downloadJson('lucky-draw-session.json', appState);
   };
   
+  const handleExportWinnersCsv = () => {
+    downloadCsv(`${title.replace(/\s+/g, '-')}-winners.csv`, buildWinnersCsvRows(winnersHistory));
+  };
+
+  const handleExportAuditLogCsv = () => {
+    downloadCsv(`${title.replace(/\s+/g, '-')}-audit-log.csv`, buildAuditLogCsvRows(auditLog));
+  };
+
+  const handleExportAuditLogJson = () => {
+    downloadJson(`${title.replace(/\s+/g, '-')}-audit-log.json`, auditLog);
+  };
+
+  const applyTemplate = (template) => {
+    const s = template.settings;
+    if (s.title !== undefined) setTitle(s.title);
+    if (s.subtitle !== undefined) setSubtitle(s.subtitle);
+    if (s.drawMode !== undefined) setDrawMode(s.drawMode);
+    if (s.operationMode !== undefined) setOperationMode(s.operationMode);
+    if (s.prizes !== undefined) setPrizes(s.prizes.map((p, i) => ({ ...p, id: Date.now() + i })));
+    if (s.winnersPerPrize !== undefined) setWinnersPerPrize(s.winnersPerPrize);
+    if (s.winnerEligibilityMode !== undefined) setWinnerEligibilityMode(s.winnerEligibilityMode);
+    if (s.noRepeatAcrossPrizes !== undefined) setNoRepeatAcrossPrizes(s.noRepeatAcrossPrizes);
+    if (s.theme !== undefined) setTheme(s.theme);
+    if (s.teamCount !== undefined) setTeamCount(s.teamCount);
+    if (s.roleConfigText !== undefined) setRoleConfigText(s.roleConfigText);
+    if (s.allowMultipleRoles !== undefined) setAllowMultipleRoles(s.allowMultipleRoles);
+    setSuccessMessage(`Template "${template.label}" loaded!`);
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
+  const resetDisplaySettings = () => {
+    setTitleFont(DISPLAY_DEFAULTS.titleFont);
+    setTitleFontSize(DISPLAY_DEFAULTS.titleFontSize);
+    setTitleLineSpacing(DISPLAY_DEFAULTS.titleLineSpacing);
+    setTitleLetterSpacing(DISPLAY_DEFAULTS.titleLetterSpacing);
+    setTitleColor('');
+    setSubtitleFont(DISPLAY_DEFAULTS.subtitleFont);
+    setSubtitleFontSize(DISPLAY_DEFAULTS.subtitleFontSize);
+    setSubtitleLineSpacing(DISPLAY_DEFAULTS.subtitleLineSpacing);
+    setSubtitleLetterSpacing(DISPLAY_DEFAULTS.subtitleLetterSpacing);
+    setSubtitleColor('');
+    setDisplayFont(DISPLAY_DEFAULTS.displayFont);
+    setDisplayFontSize(DISPLAY_DEFAULTS.displayFontSize);
+    setDisplayLineHeight(DISPLAY_DEFAULTS.displayLineHeight);
+    setDisplayLetterSpacing(DISPLAY_DEFAULTS.displayLetterSpacing);
+    setDisplayBoxWidth(DISPLAY_DEFAULTS.displayBoxWidth);
+    setDisplayBoxHeight(DISPLAY_DEFAULTS.displayBoxHeight);
+  };
+
+  const resetAudioSettings = () => {
+    setMasterVolume(AUDIO_DEFAULTS.masterVolume);
+    setSfxVolume(AUDIO_DEFAULTS.sfxVolume);
+    setMusicVolume(AUDIO_DEFAULTS.musicVolume);
+  };
+
   const handleLoadSession = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-        try {
-            restoreSession(JSON.parse(event.target.result));
-        } catch (err) {
-            setError('Invalid or corrupted session file.');
-            setTimeout(() => setError(''), 3000);
-        }
+      const { data, error: parseError } = parseSessionJson(event.target.result);
+      if (parseError) {
+        setError(parseError);
+        setTimeout(() => setError(''), 4000);
+      } else {
+        restoreSession(data);
+      }
     };
     reader.readAsText(file);
     e.target.value = null;
@@ -844,6 +920,7 @@ export default function HostView() {
                     <div className="flex border-b border-[var(--panel-border)] mb-4">
                         <button className={`py-2 px-4 ${settingsTab === 'main' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('main')}>Main</button>
                         <button className={`py-2 px-4 ${settingsTab === 'sound' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('sound')}>Sound</button>
+                        <button className={`py-2 px-4 ${settingsTab === 'templates' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('templates')}>Templates</button>
                         <button className={`py-2 px-4 ${settingsTab === 'about' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('about')}>About</button>
                     </div>
                 </div>
@@ -907,6 +984,10 @@ export default function HostView() {
                                     </div>
                                 </div>
                             </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-[var(--panel-border)]">
+                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Display Typography</p>
+                                <button onClick={resetDisplaySettings} className="text-xs px-2 py-1 rounded bg-[var(--input-bg)] border border-[var(--panel-border)] hover:opacity-80">Reset defaults</button>
+                            </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Drawing Box & Winner Text</label>
                                 <label className="text-xs mt-1 block">Display Font</label>
@@ -935,6 +1016,9 @@ export default function HostView() {
                                         <Input type="range" min="-2" max="16" step="0.1" value={displayLetterSpacing} onChange={e => setDisplayLetterSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                 </div>
+                            </div>
+                            <div className="pt-2 border-t border-[var(--panel-border)]">
+                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Participants & Draw Mode</p>
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Participant Type</label>
@@ -1040,8 +1124,11 @@ export default function HostView() {
                                   </label>
                                 </div>
                             </div>
+                            <div className="pt-2 border-t border-[var(--panel-border)]">
+                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Prizes</p>
+                            </div>
                             <div>
-                                <label className="font-semibold text-sm mb-1 block">Prizes</label>
+                                <label className="font-semibold text-sm mb-1 block">Prize List</label>
                                 {prizes.map((prize, index) => (
                                     <div key={prize.id} className="flex items-center gap-2 mb-2">
                                         <Input type="text" value={prize.name} onChange={e => {
@@ -1059,6 +1146,9 @@ export default function HostView() {
                                     <label htmlFor="winners-per-prize" className="font-semibold text-sm mb-1 block">Winners per Prize</label>
                                     <Input id="winners-per-prize" type="number" value={winnersPerPrize} onChange={(e) => setWinnersPerPrize(Math.max(1, parseInt(e.target.value, 10) || 1))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} min="1" />
                                 </div>
+                            </div>
+                            <div className="pt-2 border-t border-[var(--panel-border)]">
+                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Branding & Media</p>
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Custom Background</label>
@@ -1085,6 +1175,10 @@ export default function HostView() {
                     )}
                     {settingsTab === 'sound' && (
                         <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Volume Controls</p>
+                                <button onClick={resetAudioSettings} className="text-xs px-2 py-1 rounded bg-[var(--input-bg)] border border-[var(--panel-border)] hover:opacity-80">Reset defaults</button>
+                            </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Master Volume ({masterVolume} dB)</label>
                                 <input type="range" min="-40" max="6" step="1" value={masterVolume} onChange={e => setMasterVolume(e.target.value)} className="w-full" />
@@ -1106,10 +1200,26 @@ export default function HostView() {
                             </div>
                         </div>
                     )}
+                    {settingsTab === 'templates' && (
+                        <div className="space-y-4">
+                            <p className="text-sm text-[var(--text-muted)]">Load a preset to quickly configure the app for a specific event type. This updates the title, prizes, draw mode, operation mode, and theme — your participant list is untouched.</p>
+                            {sessionTemplates.map(template => (
+                                <div key={template.id} className="p-3 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/30">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="font-semibold text-sm">{template.label}</p>
+                                            <p className="text-xs text-[var(--text-muted)] mt-1">{template.description}</p>
+                                        </div>
+                                        <Button onClick={() => applyTemplate(template)} disabled={drawing} className="flex-shrink-0 text-sm !bg-blue-600 hover:!bg-blue-700">Load</Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     {settingsTab === 'about' && (
                         <div className="space-y-4 text-[var(--text-muted)]">
                             <h3 className="text-xl font-bold text-[var(--text-color)]">Lucky Draw Pro</h3>
-                            <p>Version 1.9.0</p>
+                            <p>Version 2.0.0</p>
                             <p>A fully customizable application for running exciting live lucky draws for any event. This tool is designed for reliability and high audience engagement.</p>
                             <p className="pt-4">Created by: <span className="font-bold text-[var(--text-color)]">Tao Mon Lae</span></p>
                         </div>
@@ -1227,7 +1337,16 @@ export default function HostView() {
         </div>
         <div className="grid grid-cols-1 gap-2 mt-3">
           <Button onClick={handleUndo} disabled={drawing || auditLog.length === 0} className="!bg-red-600 hover:!bg-red-700">Undo Last</Button>
-          <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700">Export Winners</Button>
+          <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Export Winners</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700 text-sm">Image (PNG)</Button>
+            <Button onClick={handleExportWinnersCsv} disabled={drawing || winnersHistory.length === 0} className="!bg-teal-600 hover:!bg-teal-700 text-sm">Winners CSV</Button>
+          </div>
+          <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Export Audit Log</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={handleExportAuditLogCsv} disabled={drawing || auditLog.length === 0} className="!bg-teal-700 hover:!bg-teal-800 text-sm">Log CSV</Button>
+            <Button onClick={handleExportAuditLogJson} disabled={drawing || auditLog.length === 0} className="!bg-indigo-600 hover:!bg-indigo-700 text-sm">Log JSON</Button>
+          </div>
           <Button onClick={() => resetDraw()} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Reset Draw</Button>
         </div>
       </aside>
