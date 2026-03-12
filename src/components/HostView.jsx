@@ -4,7 +4,7 @@ import { themes, fonts } from '../utils/themeConfig';
 import { Button, Input, ConfettiParticle } from './ui';
 import { useSessionStorage } from '../hooks/useSessionStorage';
 import { useAudioEngine } from '../hooks/useAudioEngine';
-import { parseEntries } from '../utils/parseEntries';
+import { parseEntries, parseEntriesFromCsv } from '../utils/parseEntries';
 import { downloadJson } from '../utils/exportUtils';
 import { isValidSessionData } from '../utils/validation';
 import { getPaddedDigits } from '../hooks/useDrawEngine';
@@ -64,6 +64,9 @@ export default function HostView() {
   const [sfxVolume, setSfxVolume] = useState(-6);
   const [musicVolume, setMusicVolume] = useState(0);
   const [currentTime, setCurrentTime] = useState(() => new Date());
+  const [duplicateGroups, setDuplicateGroups] = useState([]);
+  const [blankEntriesRemoved, setBlankEntriesRemoved] = useState(0);
+  const [participantSearch, setParticipantSearch] = useState('');
 
   // Refs
   const timeoutRef = useRef(null);
@@ -71,6 +74,7 @@ export default function HostView() {
   const displayRef = useRef(null);
   const fileInputRef = useRef(null);
   const sessionInputRef = useRef(null);
+  const csvInputRef = useRef(null);
   const logoInputRef = useRef(null);
   const bgImageInputRef = useRef(null);
   const exportRef = useRef(null);
@@ -212,7 +216,7 @@ export default function HostView() {
     return prizes[winnersHistory.length].name;
   };
 
-  const processEntries = (entries) => {
+  const processEntries = (entries, { duplicateGroups: duplicates = [], blankCount = 0 } = {}) => {
     if (entries.length > 0) {
         if (drawMode === 'numbers') {
             const maxLength = entries.reduce((max, entry) => Math.max(max, entry.length), 0);
@@ -225,15 +229,18 @@ export default function HostView() {
             resetDraw(entries);
         }
     }
+
+    setDuplicateGroups(duplicates);
+    setBlankEntriesRemoved(blankCount);
   };
 
   const updateEntries = () => {
     setError('');
-    const { entries = [], error: parseError } = parseEntries(inputValue, drawMode);
+    const { entries = [], error: parseError, duplicateGroups: duplicates = [], blankCount = 0 } = parseEntries(inputValue, drawMode);
     if (parseError) { setError(parseError); return; }
     if (entries.length < 1) { setError('Please provide at least one valid entry.'); return; }
     if (entries.length > 40000) { setError('Too many entries. Please provide 40,000 or less.'); return; }
-    processEntries(entries);
+    processEntries(entries, { duplicateGroups: duplicates, blankCount });
   };
 
   const resetDraw = (entriesToUse = initialEntries, newMaxDigits = maxDigits) => {
@@ -290,12 +297,86 @@ export default function HostView() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-        const entries = event.target.result.split('\n').map(t => t.trim()).filter(Boolean);
-        setInputValue(entries.join(', '));
-        processEntries(entries);
+        const parsed = parseEntries(event.target.result, drawMode);
+        if (parsed.error) {
+            setError(parsed.error);
+            return;
+        }
+
+        setInputValue(parsed.entries.join(', '));
+        processEntries(parsed.entries, { duplicateGroups: parsed.duplicateGroups, blankCount: parsed.blankCount });
     };
     reader.readAsText(file);
     e.target.value = null;
+  };
+
+  const handleCsvImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      const parsed = parseEntriesFromCsv(event.target.result, drawMode);
+      if (parsed.entries.length < 1) {
+        setError('CSV file does not contain valid entries.');
+        return;
+      }
+
+      if (parsed.entries.length > 40000) {
+        setError('Too many entries. Please provide 40,000 or less.');
+        return;
+      }
+
+      setInputValue(parsed.entries.join(', '));
+      processEntries(parsed.entries, { duplicateGroups: parsed.duplicateGroups, blankCount: parsed.blankCount });
+    };
+
+    reader.readAsText(file);
+    e.target.value = null;
+  };
+
+  const filteredEntries = initialEntries.filter((entry) =>
+    entry.toLocaleLowerCase().includes(participantSearch.toLocaleLowerCase().trim())
+  );
+
+  const updateEntryAt = (indexToUpdate, value) => {
+    const nextValue = value.trim();
+    if (!nextValue) return;
+
+    const nextEntries = initialEntries.map((entry, idx) => (idx === indexToUpdate ? nextValue : entry));
+    const normalized = parseEntries(nextEntries.join(', '), drawMode);
+    setInputValue(nextEntries.join(', '));
+    processEntries(normalized.entries, { duplicateGroups: normalized.duplicateGroups, blankCount: normalized.blankCount });
+  };
+
+  const removeEntryAt = (indexToRemove) => {
+    const nextEntries = initialEntries.filter((_, idx) => idx !== indexToRemove);
+    setInputValue(nextEntries.join(', '));
+
+    if (nextEntries.length === 0) {
+      setInitialEntries([]);
+      setRemainingEntries([]);
+      setDisplayValue(drawMode === 'numbers' ? '1' : 'Winner');
+      setDuplicateGroups([]);
+      return;
+    }
+
+    processEntries(nextEntries);
+  };
+
+  const removeDuplicateGroup = (kept) => {
+    const nextEntries = initialEntries.filter((entry) => entry !== kept);
+    setInputValue(nextEntries.join(', '));
+
+    if (nextEntries.length === 0) {
+      setInitialEntries([]);
+      setRemainingEntries([]);
+      setDisplayValue(drawMode === 'numbers' ? '1' : 'Winner');
+      setDuplicateGroups([]);
+      return;
+    }
+
+    processEntries(nextEntries);
   };
 
   const handleLogoUpload = (e) => {
@@ -798,13 +879,64 @@ export default function HostView() {
                                 </div>
                             </div>
                             <div>
-                                <label className="font-semibold text-sm mb-1 block">Ticket Numbers</label>
+                                <label className="font-semibold text-sm mb-1 block">Participants</label>
                                 <div className="flex items-center gap-2">
-                                    <Input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="e.g., 001-100 or 001, 007" className="flex-grow bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
+                                    <Input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={drawMode === 'numbers' ? 'e.g., 001-100, 001, 007 or mixed lines/commas' : 'e.g., Alice, Bob or one name per line'} className="flex-grow bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
                                     <Button onClick={updateEntries} disabled={drawing} className="flex-shrink-0" style={{backgroundColor: 'var(--button-primary-bg)'}}>Set</Button>
                                 </div>
-                                <Button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={drawing} className="w-full mt-2 text-sm !bg-gray-600 hover:!bg-gray-700">Load from File (.txt)</Button>
+                                <p className="text-xs mt-1 text-[var(--text-muted)]">Supports one per line, comma-separated, or mixed input. Blank items are ignored automatically.</p>
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                    <Button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Import Text</Button>
+                                    <Button onClick={() => csvInputRef.current && csvInputRef.current.click()} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Import CSV</Button>
+                                </div>
                                 <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".txt" className="hidden" />
+                                <input type="file" ref={csvInputRef} onChange={handleCsvImport} accept=".csv,text/csv" className="hidden" />
+
+                                <div className="mt-3 p-3 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/40">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <p className="text-sm font-semibold">Participant Editor</p>
+                                      <p className="text-xs text-[var(--text-muted)]">Total: {initialEntries.length}</p>
+                                    </div>
+                                    <Input type="text" value={participantSearch} onChange={(e) => setParticipantSearch(e.target.value)} placeholder="Search participants..." className="bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    <div className="mt-2 max-h-40 overflow-y-auto space-y-2 pr-1">
+                                      {filteredEntries.map((entry) => {
+                                        const index = initialEntries.indexOf(entry);
+                                        return (
+                                          <div key={`${entry}-${index}`} className="flex items-center gap-2">
+                                            <Input
+                                              type="text"
+                                              defaultValue={entry}
+                                              onBlur={(e) => updateEntryAt(index, e.target.value)}
+                                              className="bg-[var(--input-bg)] border-[var(--panel-border)]"
+                                              disabled={drawing}
+                                            />
+                                            <Button onClick={() => removeEntryAt(index)} disabled={drawing} className="!bg-red-600 text-xs !py-2 !px-3">Remove</Button>
+                                          </div>
+                                        );
+                                      })}
+                                      {filteredEntries.length === 0 && (
+                                        <p className="text-xs text-[var(--text-muted)]">No matching participants.</p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {(blankEntriesRemoved > 0 || duplicateGroups.length > 0) && (
+                                    <div className="mt-3 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 space-y-2">
+                                      <p className="text-sm font-semibold">Cleanup Summary</p>
+                                      {blankEntriesRemoved > 0 && <p className="text-xs text-[var(--text-muted)]">Removed blank entries: {blankEntriesRemoved}</p>}
+                                      {duplicateGroups.length > 0 && (
+                                        <div className="space-y-2">
+                                          <p className="text-xs text-[var(--text-muted)]">Duplicate groups: {duplicateGroups.length}</p>
+                                          {duplicateGroups.map((group) => (
+                                            <div key={group.kept} className="flex items-center justify-between gap-2 text-xs border border-[var(--panel-border)] rounded-md p-2">
+                                              <span>Keeping <strong>{group.kept}</strong> · Removed {group.removed.length}</span>
+                                              <Button onClick={() => removeDuplicateGroup(group.kept)} disabled={drawing} className="!bg-red-600 !px-2 !py-1 text-xs">Remove kept</Button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Prizes</label>
