@@ -867,26 +867,26 @@ export default function HostView() {
               </AnimatePresence>
       {showConfetti && Array.from({ length: 70 }).map((_, i) => <ConfettiParticle key={i} colors={currentTheme['--confetti-colors']} />)}
       
-       {logo && <img src={logo} alt="Event Logo" className="absolute top-4 left-4 h-16 w-auto z-30" />}
+       {logo && <img src={logo} alt="Event Logo" className="absolute left-4 h-16 w-auto z-30" style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }} />}
        
        {successMessage && (
-        <div className="absolute top-0 left-0 right-0 bg-green-600 text-white p-2 flex justify-center items-center gap-4 z-50">
+        <div className="absolute left-0 right-0 bg-green-600 text-white p-2 flex justify-center items-center gap-4 z-50" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
             <span>{successMessage}</span>
             <Button onClick={() => setSuccessMessage('')} className="!bg-transparent !text-white text-lg !py-0 !px-2">&times;</Button>
         </div>
        )}
        {error && (
-        <div className="absolute top-0 left-0 right-0 bg-red-600 text-white p-2 flex justify-center items-center gap-4 z-50">
+        <div className="absolute left-0 right-0 bg-red-600 text-white p-2 flex justify-center items-center gap-4 z-50" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
             <span>Error: {error}</span>
             <Button onClick={() => setError('')} className="!bg-transparent !text-white text-lg !py-0 !px-2">&times;</Button>
         </div>
        )}
 
-      <Button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 z-30 !bg-gray-700 hover:!bg-gray-600">
+      <Button onClick={() => setShowSettings(true)} className="absolute right-4 z-30 !bg-gray-700 hover:!bg-gray-600" style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.73l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.73l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </Button>
 
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[min(900px,95vw)] rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-4 py-3 shadow-xl">
+      <div className="absolute left-1/2 -translate-x-1/2 z-30 w-[min(900px,95vw)] rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-4 py-3 shadow-xl" style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}>
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
           <div>
             <p className="font-semibold">{quickStatus}</p>
@@ -1321,8 +1321,8 @@ export default function HostView() {
       {!historyPanelOpen && (
         <button
           onClick={() => setHistoryPanelOpen(true)}
-          className="fixed left-3 top-28 z-20 flex flex-col items-center justify-center gap-1 px-2 py-3 rounded-lg shadow-lg text-xs font-bold"
-          style={{ backgroundColor: 'var(--panel-bg)', color: 'var(--title-color)', border: '1px solid var(--panel-border)' }}
+          className="fixed left-3 z-20 flex flex-col items-center justify-center gap-1 px-2 py-3 rounded-lg shadow-lg text-xs font-bold"
+          style={{ top: 'calc(7rem + env(safe-area-inset-top, 0px))', backgroundColor: 'var(--panel-bg)', color: 'var(--title-color)', border: '1px solid var(--panel-border)' }}
           title="Show History & Audit"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1332,7 +1332,7 @@ export default function HostView() {
         </button>
       )}
 
-      <aside className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform duration-300 ${historyPanelOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}`}>
+      <aside className={`fixed left-2 sm:left-4 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform duration-300 ${historyPanelOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}`} style={{ top: 'calc(6rem + env(safe-area-inset-top, 0px))' }}>
         <div className="flex items-center justify-between gap-2 mb-3">
           <h2 className="text-lg sm:text-2xl font-bold" style={{color: 'var(--title-color)'}}>History & Audit</h2>
           <button
