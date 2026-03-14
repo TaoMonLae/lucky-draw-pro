@@ -541,13 +541,19 @@ export default function HostView() {
     playApplause();
   };
 
-  const startCharging = async () => {
-    if (drawing || remainingEntries.length === 0 || winnersHistory.length >= prizes.length) return;
-    
+  const ensureAudioStarted = async () => {
     if (scriptsLoaded.tone && !audioStarted.current) {
-        await Tone.start();
-        audioStarted.current = true;
+      await Tone.start();
+      audioStarted.current = true;
     }
+  };
+
+  const startCharging = async () => {
+    if (drawing || isCharging || remainingEntries.length === 0 || winnersHistory.length >= prizes.length) return;
+
+    await ensureAudioStarted();
+
+    clearInterval(chargeIntervalRef.current);
 
     setIsCharging(true);
     chargeIntervalRef.current = setInterval(() => {
@@ -689,6 +695,8 @@ export default function HostView() {
     .filter((role) => role.name && role.count > 0);
 
   const drawNextWinner = async () => {
+    await ensureAudioStarted();
+
     if (operationMode !== 'standard') {
       const blocked = noRepeatAcrossPrizes ? getNoRepeatSet(auditLog) : new Set();
       const eligible = initialEntries.filter((entry) => !blocked.has(entry));
@@ -700,7 +708,10 @@ export default function HostView() {
       if (operationMode === 'team-divider') {
         const teams = divideIntoTeams(eligible, teamCount);
         const selected = teams.flatMap((team) => team.members);
-        setDisplayValue(`Created ${teams.length} teams`);
+        const teamSummary = teams
+          .map((team) => `${team.teamName}: ${team.members.join(', ')}`)
+          .join(' | ');
+        setDisplayValue(teamSummary || `Created ${teams.length} teams`);
         setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'team-divider', context: `${teams.length} teams`, selected, remainingCount: eligible.length })]);
         setCurrentPrize(`Team Divider (${teams.length} teams)`);
         return;
@@ -713,7 +724,10 @@ export default function HostView() {
       }
       const assignments = assignRoles(eligible, roleRules, { allowMultipleRoles });
       const selected = assignments.flatMap((role) => role.participants);
-      setDisplayValue(`Assigned ${selected.length} roles`);
+      const roleSummary = assignments
+        .map((role) => `${role.role}: ${role.participants.join(', ')}`)
+        .join(' | ');
+      setDisplayValue(roleSummary || `Assigned ${selected.length} roles`);
       setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'role-selector', context: `${assignments.length} roles`, selected, remainingCount: eligible.length })]);
       setCurrentPrize('Role Selector');
       return;
@@ -759,6 +773,7 @@ export default function HostView() {
     setRemainingEntries(nextRemaining);
     setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'standard', context: currentPrizeName, selected: drawnTickets, remainingCount: nextRemaining.length })]);
     setShowConfetti(true);
+    playCelebration();
     setTimeout(() => setShowConfetti(false), 5000);
     setDrawing(false);
   };
@@ -882,22 +897,22 @@ export default function HostView() {
         </div>
        )}
 
-      <Button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 z-30 !bg-gray-700 hover:!bg-gray-600">
+      <Button onClick={() => setShowSettings(true)} className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 !bg-gray-700 hover:!bg-gray-600 !p-2 sm:!p-3">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.73l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.73l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </Button>
 
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-[min(900px,95vw)] rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-4 py-3 shadow-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+      <div className="fixed bottom-3 right-3 sm:absolute sm:top-4 sm:left-1/2 sm:bottom-auto sm:right-auto sm:-translate-x-1/2 z-30 w-[min(78vw,320px)] sm:w-[min(900px,95vw)] rounded-xl sm:rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-3 sm:px-4 py-2 sm:py-3 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 text-xs sm:text-sm">
           <div>
             <p className="font-semibold">{quickStatus}</p>
-            <p style={{ color: 'var(--text-muted)' }}>Current prize: <span className="font-semibold" style={{ color: 'var(--title-color)' }}>{getPrizeName()}</span></p>
+            <p style={{ color: 'var(--text-muted)' }} className="text-[10px] sm:text-sm">Current prize: <span className="font-semibold" style={{ color: 'var(--title-color)' }}>{getPrizeName()}</span></p>
           </div>
           <div className="text-right">
-            <p className="text-lg font-semibold tabular-nums">{currentTime.toLocaleTimeString()}</p>
-            <p style={{ color: 'var(--text-muted)' }}>Shortcut: Space draw · S settings · F fullscreen</p>
+            <p className="text-sm sm:text-lg font-semibold tabular-nums">{currentTime.toLocaleTimeString()}</p>
+            <p style={{ color: 'var(--text-muted)' }} className="hidden sm:block">Shortcut: Space draw · S settings · F fullscreen</p>
           </div>
         </div>
-        <div className="mt-3 h-2 rounded-full" style={{ backgroundColor: 'var(--panel-border)' }}>
+        <div className="mt-2 sm:mt-3 h-1.5 sm:h-2 rounded-full" style={{ backgroundColor: 'var(--panel-border)' }}>
           <div className="h-2 rounded-full transition-all duration-700" style={{ width: `${drawProgress}%`, backgroundColor: 'var(--button-action-bg)' }} />
         </div>
       </div>
@@ -1302,15 +1317,15 @@ export default function HostView() {
             )}
             </AnimatePresence>
             <Button 
-                onMouseDown={operationMode === 'standard' ? startCharging : undefined}
-                onMouseUp={operationMode === 'standard' ? stopCharging : undefined}
-                onMouseLeave={operationMode === 'standard' ? stopCharging : undefined}
-                onTouchStart={operationMode === 'standard' ? startCharging : undefined}
-                onTouchEnd={operationMode === 'standard' ? stopCharging : undefined}
+                onPointerDown={operationMode === 'standard' ? startCharging : undefined}
+                onPointerUp={operationMode === 'standard' ? stopCharging : undefined}
+                onPointerLeave={operationMode === 'standard' ? stopCharging : undefined}
+                onPointerCancel={operationMode === 'standard' ? stopCharging : undefined}
+                onContextMenu={(event) => event.preventDefault()}
                 onClick={operationMode === 'standard' ? undefined : drawNextWinner}
                 disabled={drawing || (operationMode === 'standard' && remainingEntries.length === 0) || (operationMode === 'standard' && winnersHistory.length >= prizes.length)} 
                 className="w-full px-6 py-3 sm:px-10 sm:py-4 text-base sm:text-xl text-black" 
-                style={{backgroundColor: 'var(--button-action-bg)'}}
+                style={{backgroundColor: 'var(--button-action-bg)', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'}}
             >
               {operationMode === 'standard' ? (isCharging ? "Charging..." : "Hold to Draw") : 'Run Assignment'}
             </Button>
@@ -1357,6 +1372,22 @@ export default function HostView() {
               {typeof entry.remainingCount === 'number' && <p className="text-xs">Remaining: {entry.remainingCount}</p>}
             </details>
           )) : <p className="text-xs sm:text-sm text-center mt-3" style={{color: 'var(--text-muted)'}}>No history yet.</p>}
+
+          {winnersHistory.length > 0 && (
+            <div className="pt-2 space-y-2 border-t border-[var(--panel-border)]">
+              <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Winner PNG Export</p>
+              {winnersHistory.flatMap((group) => group.tickets.map((ticket) => ({ prize: group.prize, ticket }))).map((winner, index) => (
+                <Button
+                  key={`${winner.prize}-${winner.ticket}-${index}`}
+                  onClick={() => setWinnerToExport(winner)}
+                  disabled={drawing}
+                  className="w-full !bg-sky-700 hover:!bg-sky-800 text-xs sm:text-sm"
+                >
+                  Export {winner.prize}: {winner.ticket}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-2 mt-3">
           <Button onClick={handleUndo} disabled={drawing || auditLog.length === 0} className="!bg-red-600 hover:!bg-red-700">Undo Last</Button>
