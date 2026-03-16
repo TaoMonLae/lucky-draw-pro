@@ -99,6 +99,8 @@ export default function HostView() {
   const [noRepeatAcrossPrizes, setNoRepeatAcrossPrizes] = useState(false);
   const [auditLog, setAuditLog] = useState([]);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [assignmentHistory, setAssignmentHistory] = useState([]);
+  const [assignmentToExport, setAssignmentToExport] = useState(null);
 
   // Refs
   const timeoutRef = useRef(null);
@@ -111,6 +113,7 @@ export default function HostView() {
   const bgImageInputRef = useRef(null);
   const exportRef = useRef(null);
   const exportAllRef = useRef(null);
+  const assignmentExportRef = useRef(null);
   const drawActionRef = useRef(() => {});
   const qrCodeRef = useRef(null);
   const audioStarted = useRef(false);
@@ -137,7 +140,7 @@ export default function HostView() {
     displayFont, displayFontSize, displayLineHeight, displayLetterSpacing,
     displayBoxWidth, displayBoxHeight,
     operationMode, teamCount, roleConfigText, allowMultipleRoles,
-    winnerEligibilityMode, noRepeatAcrossPrizes, auditLog
+    winnerEligibilityMode, noRepeatAcrossPrizes, auditLog, assignmentHistory
   };
 
   useSessionStorage('lucky-draw-autosave', appState);
@@ -189,6 +192,7 @@ export default function HostView() {
         setWinnerEligibilityMode(data.winnerEligibilityMode || 'remove');
         setNoRepeatAcrossPrizes(Boolean(data.noRepeatAcrossPrizes));
         setAuditLog(Array.isArray(data.auditLog) ? data.auditLog : []);
+        setAssignmentHistory(Array.isArray(data.assignmentHistory) ? data.assignmentHistory : []);
         const firstEntry = (data.remainingEntries && data.remainingEntries[0]) || (data.initialEntries && data.initialEntries[0]) || '1';
         setDisplayValue(firstEntry);
         setSuccessMessage('Session restored successfully!');
@@ -287,6 +291,7 @@ export default function HostView() {
     setWinnersHistory([]);
     const firstEntry = entriesToUse[0] || (drawMode === 'numbers' ? '1' : 'Winner');
     setAuditLog([]);
+    setAssignmentHistory([]);
     setDisplayValue(firstEntry);
     setError('');
     setShowConfetti(false);
@@ -338,6 +343,13 @@ export default function HostView() {
 
   const handleExportAuditLogJson = () => {
     downloadJson(`${title.replace(/\s+/g, '-')}-audit-log.json`, auditLog);
+  };
+
+  const handleExportAssignmentCsv = (assignment) => {
+    const rows = assignment.type === 'team-divider'
+      ? [['Team', 'Members'], ...assignment.data.map((t) => [t.teamName, t.members.join(', ')])]
+      : [['Role', 'Participants'], ...assignment.data.map((r) => [r.role, r.participants.join(', ')])];
+    downloadCsv(`${title.replace(/\s+/g, '-')}-${assignment.type}.csv`, rows);
   };
 
   const applyTemplate = (template) => {
@@ -718,6 +730,7 @@ export default function HostView() {
             await new Promise((resolve) => setTimeout(resolve, 2500));
           }
         }
+        setAssignmentHistory((prev) => [...prev, { id: Date.now(), type: 'team-divider', data: teams, timestamp: new Date().toISOString() }]);
         setDrawing(false);
         return;
       }
@@ -739,6 +752,7 @@ export default function HostView() {
           await new Promise((resolve) => setTimeout(resolve, 2500));
         }
       }
+      setAssignmentHistory((prev) => [...prev, { id: Date.now(), type: 'role-selector', data: assignments, timestamp: new Date().toISOString() }]);
       setDrawing(false);
       return;
     }
@@ -857,7 +871,29 @@ export default function HostView() {
         exportAllImage();
     }
   }, [exportAllTrigger, theme, title, logo, winnersHistory]);
-  
+
+  useEffect(() => {
+    if (assignmentToExport && assignmentExportRef.current) {
+      const doExport = async () => {
+        try {
+          const dataUrl = await htmlToImage.toPng(assignmentExportRef.current, {
+            quality: 0.95,
+            backgroundColor: themes[theme]['--bg-color'],
+          });
+          const link = document.createElement('a');
+          link.download = `${title.replace(/\s+/g, '-')}-${assignmentToExport.type}.png`;
+          link.href = dataUrl;
+          link.click();
+        } catch (err) {
+          console.error('Failed to export assignment image', err);
+        } finally {
+          setAssignmentToExport(null);
+        }
+      };
+      doExport();
+    }
+  }, [assignmentToExport, theme, title, logo]);
+
   useEffect(() => {
     return () => {
         clearTimeout(timeoutRef.current);
@@ -1407,6 +1443,23 @@ export default function HostView() {
             <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700 text-sm">Image (PNG)</Button>
             <Button onClick={handleExportWinnersCsv} disabled={drawing || winnersHistory.length === 0} className="!bg-teal-600 hover:!bg-teal-700 text-sm">Winners CSV</Button>
           </div>
+          {assignmentHistory.length > 0 && (
+            <>
+              <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Export Assignments</p>
+              {assignmentHistory.slice().reverse().map((assignment) => (
+                <div key={assignment.id} className="rounded-lg p-2 space-y-1" style={{ backgroundColor: 'var(--display-bg)' }}>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--title-color)' }}>
+                    {assignment.type === 'team-divider' ? `Teams (${assignment.data.length})` : `Roles (${assignment.data.length})`}
+                    <span className="ml-1 font-normal" style={{ color: 'var(--text-muted)' }}>{new Date(assignment.timestamp).toLocaleTimeString()}</span>
+                  </p>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button onClick={() => setAssignmentToExport(assignment)} disabled={drawing} className="!bg-sky-700 hover:!bg-sky-800 text-xs">PNG</Button>
+                    <Button onClick={() => handleExportAssignmentCsv(assignment)} disabled={drawing} className="!bg-teal-600 hover:!bg-teal-700 text-xs">CSV</Button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
           <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Export Audit Log</p>
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={handleExportAuditLogCsv} disabled={drawing || auditLog.length === 0} className="!bg-teal-700 hover:!bg-teal-800 text-sm">Log CSV</Button>
@@ -1446,6 +1499,38 @@ export default function HostView() {
                         ))}
                      </div>
                  </div>
+            )}
+         </div>
+         <div ref={assignmentExportRef}>
+            {assignmentToExport && (
+              <div style={{ width: 900, padding: 40, boxSizing: 'border-box', ...themes[theme] }}>
+                {logo && <img src={logo} alt="Logo" style={{ height: 80, width: 'auto', marginBottom: 24 }} />}
+                <h2 style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 8, color: themes[theme]['--title-color'] }}>{title}</h2>
+                <h3 style={{ fontSize: 20, fontWeight: '600', marginBottom: 24, color: themes[theme]['--text-muted'] }}>
+                  {assignmentToExport.type === 'team-divider' ? 'Team Assignments' : 'Role Assignments'}
+                  {' · '}{new Date(assignmentToExport.timestamp).toLocaleString()}
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px 32px' }}>
+                  {assignmentToExport.type === 'team-divider'
+                    ? assignmentToExport.data.map((team) => (
+                      <div key={team.teamName}>
+                        <h4 style={{ fontSize: 20, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{team.teamName}</h4>
+                        <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                          {team.members.map((m) => <li key={m} style={{ fontSize: 16, marginBottom: 4, color: themes[theme]['--display-text'] }}>{m}</li>)}
+                        </ul>
+                      </div>
+                    ))
+                    : assignmentToExport.data.map((role) => (
+                      <div key={role.role}>
+                        <h4 style={{ fontSize: 20, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{role.role}</h4>
+                        <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                          {role.participants.map((p) => <li key={p} style={{ fontSize: 16, marginBottom: 4, color: themes[theme]['--display-text'] }}>{p}</li>)}
+                        </ul>
+                      </div>
+                    ))
+                  }
+                </div>
+              </div>
             )}
          </div>
       </div>
