@@ -708,12 +708,17 @@ export default function HostView() {
       if (operationMode === 'team-divider') {
         const teams = divideIntoTeams(eligible, teamCount);
         const selected = teams.flatMap((team) => team.members);
-        const teamSummary = teams
-          .map((team) => `${team.teamName}: ${team.members.join(', ')}`)
-          .join(' | ');
-        setDisplayValue(teamSummary || `Created ${teams.length} teams`);
         setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'team-divider', context: `${teams.length} teams`, selected, remainingCount: eligible.length })]);
         setCurrentPrize(`Team Divider (${teams.length} teams)`);
+        setDrawing(true);
+        for (let i = 0; i < teams.length; i++) {
+          setDisplayValue(`${teams[i].teamName}: ${teams[i].members.join(', ')}`);
+          setPulse(true);
+          if (i < teams.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 2500));
+          }
+        }
+        setDrawing(false);
         return;
       }
 
@@ -724,12 +729,17 @@ export default function HostView() {
       }
       const assignments = assignRoles(eligible, roleRules, { allowMultipleRoles });
       const selected = assignments.flatMap((role) => role.participants);
-      const roleSummary = assignments
-        .map((role) => `${role.role}: ${role.participants.join(', ')}`)
-        .join(' | ');
-      setDisplayValue(roleSummary || `Assigned ${selected.length} roles`);
       setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'role-selector', context: `${assignments.length} roles`, selected, remainingCount: eligible.length })]);
       setCurrentPrize('Role Selector');
+      setDrawing(true);
+      for (let i = 0; i < assignments.length; i++) {
+        setDisplayValue(`${assignments[i].role}: ${assignments[i].participants.join(', ')}`);
+        setPulse(true);
+        if (i < assignments.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+        }
+      }
+      setDrawing(false);
       return;
     }
 
@@ -1258,14 +1268,15 @@ export default function HostView() {
                 </motion.div>
             )}
         </AnimatePresence>
-        <motion.div 
-            ref={displayRef} 
+        <motion.div
+            ref={displayRef}
             className="rounded-2xl shadow-inner flex items-center justify-center p-4 border-4"
             style={{
                 backgroundColor: 'var(--display-bg)',
                 borderColor: 'var(--display-border)',
                 width: `min(${displayBoxWidth}px, 95vw)`,
-                height: `${displayBoxHeight}px`
+                minHeight: `${displayBoxHeight}px`,
+                height: 'auto',
             }}
             animate={pulse ? {boxShadow: ['0 0 0px #fff', '0 0 40px #fff', '0 0 0px #fff']} : {}}
             transition={pulse ? {duration: 0.8, ease: 'easeInOut'} : {}}
@@ -1284,7 +1295,7 @@ export default function HostView() {
                     ))}
                 </div>
             ) : (
-                 <div className="font-bold px-4 text-center" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: `clamp(2rem, ${Math.max(38, displayFontSize * 0.7) / 16}rem, 6rem)`, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`}}>
+                 <div className="font-bold px-4 text-center w-full" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: `clamp(2rem, ${Math.max(38, displayFontSize * 0.7) / 16}rem, 6rem)`, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, wordBreak: 'break-word', overflowWrap: 'break-word'}}>
                     <AnimatePresence mode="popLayout">
                         <motion.span key={displayValue} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
                             {displayValue}
