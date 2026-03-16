@@ -8,7 +8,7 @@ import { Button, Input, ConfettiParticle } from './ui';
 import { useSessionStorage } from '../hooks/useSessionStorage';
 import { useAudioEngine } from '../hooks/useAudioEngine';
 import { parseEntries, parseEntriesFromCsv } from '../utils/parseEntries';
-import { downloadJson, downloadCsv, buildWinnersCsvRows, buildAuditLogCsvRows } from '../utils/exportUtils';
+import { downloadJson, downloadCsv, buildWinnersCsvRows, buildAuditLogCsvRows, buildAssignmentCsvRows } from '../utils/exportUtils';
 import { isValidSessionData, parseSessionJson } from '../utils/validation';
 import { sessionTemplates } from '../utils/sessionTemplates';
 import { getPaddedDigits } from '../hooks/useDrawEngine';
@@ -99,6 +99,8 @@ export default function HostView() {
   const [noRepeatAcrossPrizes, setNoRepeatAcrossPrizes] = useState(false);
   const [auditLog, setAuditLog] = useState([]);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const [lastAssignmentResult, setLastAssignmentResult] = useState(null);
+  const [exportAssignmentTrigger, setExportAssignmentTrigger] = useState(false);
 
   // Refs
   const timeoutRef = useRef(null);
@@ -111,6 +113,7 @@ export default function HostView() {
   const bgImageInputRef = useRef(null);
   const exportRef = useRef(null);
   const exportAllRef = useRef(null);
+  const exportAssignmentRef = useRef(null);
   const drawActionRef = useRef(() => {});
   const qrCodeRef = useRef(null);
   const audioStarted = useRef(false);
@@ -338,6 +341,12 @@ export default function HostView() {
 
   const handleExportAuditLogJson = () => {
     downloadJson(`${title.replace(/\s+/g, '-')}-audit-log.json`, auditLog);
+  };
+
+  const handleExportAssignmentCsv = () => {
+    if (!lastAssignmentResult) return;
+    const suffix = lastAssignmentResult.mode === 'team-divider' ? 'teams' : 'roles';
+    downloadCsv(`${title.replace(/\s+/g, '-')}-${suffix}.csv`, buildAssignmentCsvRows(lastAssignmentResult));
   };
 
   const applyTemplate = (template) => {
@@ -709,6 +718,7 @@ export default function HostView() {
         const teams = divideIntoTeams(eligible, teamCount);
         const selected = teams.flatMap((team) => team.members);
         setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'team-divider', context: `${teams.length} teams`, selected, remainingCount: eligible.length })]);
+        setLastAssignmentResult({ mode: 'team-divider', teams });
         setCurrentPrize(`Team Divider (${teams.length} teams)`);
         setDrawing(true);
         for (let i = 0; i < teams.length; i++) {
@@ -730,6 +740,7 @@ export default function HostView() {
       const assignments = assignRoles(eligible, roleRules, { allowMultipleRoles });
       const selected = assignments.flatMap((role) => role.participants);
       setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'role-selector', context: `${assignments.length} roles`, selected, remainingCount: eligible.length })]);
+      setLastAssignmentResult({ mode: 'role-selector', assignments });
       setCurrentPrize('Role Selector');
       setDrawing(true);
       for (let i = 0; i < assignments.length; i++) {
@@ -857,7 +868,30 @@ export default function HostView() {
         exportAllImage();
     }
   }, [exportAllTrigger, theme, title, logo, winnersHistory]);
-  
+
+  useEffect(() => {
+    if (exportAssignmentTrigger && exportAssignmentRef.current && lastAssignmentResult) {
+        const exportAssignmentImage = async () => {
+            try {
+                const dataUrl = await htmlToImage.toPng(exportAssignmentRef.current, {
+                    quality: 0.95,
+                    backgroundColor: themes[theme]['--bg-color'],
+                });
+                const suffix = lastAssignmentResult.mode === 'team-divider' ? 'teams' : 'roles';
+                const link = document.createElement('a');
+                link.download = `${title.replace(/\s/g, '-')}-${suffix}.png`;
+                link.href = dataUrl;
+                link.click();
+            } catch (err) {
+                console.error('Failed to export assignment image', err);
+            } finally {
+                setExportAssignmentTrigger(false);
+            }
+        };
+        exportAssignmentImage();
+    }
+  }, [exportAssignmentTrigger, theme, title, lastAssignmentResult]);
+
   useEffect(() => {
     return () => {
         clearTimeout(timeoutRef.current);
@@ -869,6 +903,20 @@ export default function HostView() {
   const drawProgress = initialEntries.length ? Math.round((winnersHistory.reduce((sum, group) => sum + group.tickets.length, 0) / initialEntries.length) * 100) : 0;
   const canDraw = !drawing && remainingEntries.length > 0 && winnersHistory.length < prizes.length;
   const quickStatus = canDraw ? 'Ready for next draw' : drawing ? 'Drawing in progress...' : 'Draw completed';
+
+  // Auto-expand display box for names in Standard Draw Mode
+  const isStandardNames = operationMode === 'standard' && drawMode === 'names';
+  const displayBoxComputedWidth = isStandardNames
+    ? `min(${Math.max(displayBoxWidth, 640)}px, 95vw)`
+    : `min(${displayBoxWidth}px, 95vw)`;
+  const maxNameFontRem = Math.max(38, displayFontSize * 0.7) / 16;
+  const nameLen = isStandardNames ? (displayValue || '').length : 0;
+  const scaledNameFontRem = isStandardNames && nameLen > 0
+    ? Math.min(maxNameFontRem, Math.max(1.5, 5 / Math.max(nameLen / 8, 1)))
+    : maxNameFontRem;
+  const displayNameFontSize = isStandardNames
+    ? `clamp(1.5rem, ${scaledNameFontRem}rem, 6rem)`
+    : `clamp(2rem, ${maxNameFontRem}rem, 6rem)`;
   const mainStyle = {
     ...currentTheme,
     backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
@@ -1274,7 +1322,7 @@ export default function HostView() {
             style={{
                 backgroundColor: 'var(--display-bg)',
                 borderColor: 'var(--display-border)',
-                width: `min(${displayBoxWidth}px, 95vw)`,
+                width: displayBoxComputedWidth,
                 minHeight: `${displayBoxHeight}px`,
                 height: 'auto',
             }}
@@ -1295,7 +1343,7 @@ export default function HostView() {
                     ))}
                 </div>
             ) : (
-                 <div className="font-bold px-4 text-center w-full" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: `clamp(2rem, ${Math.max(38, displayFontSize * 0.7) / 16}rem, 6rem)`, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, wordBreak: 'break-word', overflowWrap: 'break-word'}}>
+                 <div className="font-bold px-4 text-center w-full" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: displayNameFontSize, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, wordBreak: 'break-word', overflowWrap: 'break-word'}}>
                     <AnimatePresence mode="popLayout">
                         <motion.span key={displayValue} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
                             {displayValue}
@@ -1407,6 +1455,19 @@ export default function HostView() {
             <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700 text-sm">Image (PNG)</Button>
             <Button onClick={handleExportWinnersCsv} disabled={drawing || winnersHistory.length === 0} className="!bg-teal-600 hover:!bg-teal-700 text-sm">Winners CSV</Button>
           </div>
+          {lastAssignmentResult && (
+            <>
+              <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">
+                Export {lastAssignmentResult.mode === 'team-divider' ? 'Teams' : 'Roles'}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={() => setExportAssignmentTrigger(true)} disabled={drawing} className="!bg-green-600 hover:!bg-green-700 text-sm">Image (PNG)</Button>
+                <Button onClick={handleExportAssignmentCsv} disabled={drawing} className="!bg-teal-600 hover:!bg-teal-700 text-sm">
+                  {lastAssignmentResult.mode === 'team-divider' ? 'Teams CSV' : 'Roles CSV'}
+                </Button>
+              </div>
+            </>
+          )}
           <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Export Audit Log</p>
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={handleExportAuditLogCsv} disabled={drawing || auditLog.length === 0} className="!bg-teal-700 hover:!bg-teal-800 text-sm">Log CSV</Button>
@@ -1446,6 +1507,41 @@ export default function HostView() {
                         ))}
                      </div>
                  </div>
+            )}
+         </div>
+         <div ref={exportAssignmentRef}>
+            {exportAssignmentTrigger && lastAssignmentResult && (
+                <div style={{ width: 900, padding: 40, boxSizing: 'border-box', ...themes[theme] }}>
+                    {logo && <img src={logo} alt="Logo" style={{ height: 80, width: 'auto', marginBottom: 24 }} />}
+                    <h2 style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 8, color: themes[theme]['--title-color'] }}>
+                        {title} - {lastAssignmentResult.mode === 'team-divider' ? 'Team Assignment' : 'Role Assignment'}
+                    </h2>
+                    <p style={{ fontSize: 14, marginBottom: 24, color: themes[theme]['--text-muted'] }}>{new Date().toLocaleString()}</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px 32px' }}>
+                        {lastAssignmentResult.mode === 'team-divider'
+                            ? lastAssignmentResult.teams.map(team => (
+                                <div key={team.teamName}>
+                                    <h3 style={{ fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{team.teamName}</h3>
+                                    <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                                        {team.members.map((member, i) => (
+                                            <li key={i} style={{ fontFamily: 'monospace', fontSize: 16, marginBottom: 4, color: themes[theme]['--display-text'] }}>{member}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ))
+                            : lastAssignmentResult.assignments.map(assignment => (
+                                <div key={assignment.role}>
+                                    <h3 style={{ fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{assignment.role}</h3>
+                                    <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                                        {assignment.participants.map((p, i) => (
+                                            <li key={i} style={{ fontFamily: 'monospace', fontSize: 16, marginBottom: 4, color: themes[theme]['--display-text'] }}>{p}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ))
+                        }
+                    </div>
+                </div>
             )}
          </div>
       </div>

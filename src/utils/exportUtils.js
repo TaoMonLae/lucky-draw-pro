@@ -52,3 +52,26 @@ export function buildAuditLogCsvRows(auditLog) {
   });
   return rows;
 }
+
+export function buildAssignmentCsvRows(lastAssignmentResult) {
+  if (!lastAssignmentResult) return [];
+  if (lastAssignmentResult.mode === 'team-divider') {
+    const rows = [['Team', 'Member']];
+    lastAssignmentResult.teams.forEach(team => {
+      team.members.forEach(member => {
+        rows.push([team.teamName, member]);
+      });
+    });
+    return rows;
+  }
+  if (lastAssignmentResult.mode === 'role-selector') {
+    const rows = [['Role', 'Participant']];
+    lastAssignmentResult.assignments.forEach(assignment => {
+      assignment.participants.forEach(participant => {
+        rows.push([assignment.role, participant]);
+      });
+    });
+    return rows;
+  }
+  return [];
+}
