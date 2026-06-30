@@ -13,6 +13,7 @@ import { isValidSessionData, parseSessionJson } from '../utils/validation';
 import { sessionTemplates } from '../utils/sessionTemplates';
 import { getPaddedDigits } from '../hooks/useDrawEngine';
 import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '../utils/drawModes';
+import { buildPublicViewUrl } from '../utils/publicViewUrl';
 
 const DISPLAY_DEFAULTS = {
   titleFont: 'sans-serif',
@@ -243,7 +244,7 @@ export default function HostView() {
     if (settingsTab === 'jumbotron' && scriptsLoaded.qrcode && qrCodeRef.current) {
         qrCodeRef.current.innerHTML = '';
         new QRCode(qrCodeRef.current, {
-            text: window.location.href + '?view=public',
+            text: buildPublicViewUrl(window.location.href),
             width: 192,
             height: 192,
             colorDark: themes[theme]['--text-color'],
