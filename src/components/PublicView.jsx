@@ -1,11 +1,28 @@
 import React from 'react';
 import { usePublicSync } from '../hooks/usePublicSync';
 
-export default function PublicView() {
-  const drawState = usePublicSync();
+const SYNC_LABELS = {
+  connecting: 'Connecting…',
+  live: 'Live',
+  local: 'Same-device mode',
+  unconfigured: 'Live sync unavailable',
+  error: 'Connection error',
+  closed: 'Sharing stopped',
+};
+
+export default function PublicView({ roomId = '' }) {
+  const { drawState, syncStatus, errorMessage } = usePublicSync({ roomId });
 
   if (!drawState) {
-    return <div className="flex items-center justify-center min-h-screen bg-gray-100 text-gray-800">Waiting for draw to start...</div>;
+    return (
+      <div className="flex flex-col gap-3 items-center justify-center min-h-screen bg-gray-100 text-gray-800 p-6 text-center">
+        <p className="text-2xl font-semibold">Waiting for draw to start…</p>
+        <p className="text-sm text-gray-600">{SYNC_LABELS[syncStatus]}</p>
+        {roomId && <p className="text-xs text-gray-500">Room {roomId.slice(0, 8)}</p>}
+        {errorMessage && <p role="alert" className="max-w-lg text-sm text-red-700">{errorMessage}</p>}
+        {!roomId && <p className="max-w-lg text-sm text-amber-700">This link has no live room ID and can only receive updates from the same browser profile.</p>}
+      </div>
+    );
   }
 
   const { title = 'Lucky Draw', logo, winnersHistory = [], operationMode = 'standard', lastAssignmentResult } = drawState;
@@ -21,7 +38,11 @@ export default function PublicView() {
 
   return (
     <div style={vintageStyle} className="min-h-screen p-4 sm:p-8 text-[#3a2f2f]">
+      <div title={errorMessage || undefined} className={`fixed top-3 right-3 z-20 rounded-full px-3 py-1 text-xs font-semibold shadow ${syncStatus === 'live' ? 'bg-green-600 text-white' : syncStatus === 'error' || syncStatus === 'unconfigured' || syncStatus === 'closed' ? 'bg-red-600 text-white' : 'bg-amber-400 text-gray-900'}`}>
+        {SYNC_LABELS[syncStatus]}
+      </div>
       <div className="max-w-4xl mx-auto">
+        {errorMessage && <p role="alert" className="mb-4 rounded bg-red-100 px-3 py-2 text-center text-sm text-red-800">{errorMessage}</p>}
         {logo && <img src={logo} alt="Event Logo" className="h-24 w-auto mx-auto mb-6" />}
         <h1 className="text-3xl sm:text-5xl font-bold text-center mb-6 sm:mb-8 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{title} - {headingSuffix}</h1>
         {isTeamView ? (

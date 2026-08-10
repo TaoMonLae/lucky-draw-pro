@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 
-export const MON_CHARACTERS = 'ကခဂဃၚစဆဇၛဉညဋဌဍဎဏတထဒဓနပဖဗဘမယရလဝသဟဠအၜၝဣဥဨသြ';
+export const MON_CHARACTERS = 'ကခဂဃၚစဆဇၛဉညဋဌဍဎဏတထဒဓနပဖဗဘမယရလဝသဟဠအၜၝဣဥဨ';
 const DEFAULT_CHARACTERS = `ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$&*()-_+=/[]{};:<>.,0123456789${MON_CHARACTERS}`;
 
 const LetterGlitch = ({

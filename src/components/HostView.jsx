@@ -13,6 +13,9 @@ import { sessionTemplates } from '../utils/sessionTemplates';
 import { getPaddedDigits } from '../hooks/useDrawEngine';
 import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '../utils/drawModes';
 import { buildPublicViewUrl } from '../utils/publicViewUrl';
+import { useRealtimePublisher } from '../hooks/useRealtimePublisher';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+import { clearRoomCredentials, createRoomCredentials, loadRoomCredentials, saveRoomCredentials } from '../utils/realtimeRoom';
 import LetterGlitch from './LetterGlitch';
 
 const DISPLAY_DEFAULTS = {
@@ -35,6 +38,14 @@ const DISPLAY_DEFAULTS = {
 const AUDIO_DEFAULTS = { masterVolume: 0, sfxVolume: -6, musicVolume: 0 };
 const MAX_EMBEDDED_IMAGE_CHARS = 4_000_000;
 const LETTER_GLITCH_COLORS = ['#123044', '#06b6d4', '#facc15'];
+const LIVE_SYNC_LABELS = {
+  unconfigured: 'Setup required',
+  idle: 'Not connected',
+  connecting: 'Connecting…',
+  syncing: 'Updating…',
+  live: 'Live',
+  error: 'Sync error',
+};
 
 export default function HostView() {
   const [maxDigits, setMaxDigits] = useState(2);
@@ -105,6 +116,8 @@ export default function HostView() {
   const [lastAssignmentResult, setLastAssignmentResult] = useState(null);
   const [exportAssignmentTrigger, setExportAssignmentTrigger] = useState(false);
   const [autosaveReady, setAutosaveReady] = useState(false);
+  const [liveRoom, setLiveRoom] = useState(() => loadRoomCredentials());
+  const [roomActionPending, setRoomActionPending] = useState(false);
 
   // Refs
   const timeoutRef = useRef(null);
@@ -236,6 +249,14 @@ export default function HostView() {
   }, []);
 
   useSessionStorage('lucky-draw-autosave', appState, autosaveReady);
+
+  const liveSync = useRealtimePublisher({
+    roomId: liveRoom?.roomId || '',
+    writeKey: liveRoom?.writeKey || '',
+    appState,
+    enabled: autosaveReady && Boolean(liveRoom) && !roomActionPending,
+  });
+  const publicViewUrl = buildPublicViewUrl(window.location.href, liveRoom?.roomId || '');
 
   // Script and Audio Setup
   useAudioEngine({ setScriptsLoaded });
@@ -413,7 +434,6 @@ export default function HostView() {
   };
 
   const handleCopyPublicViewUrl = async () => {
-    const publicViewUrl = buildPublicViewUrl(window.location.href);
     let copied = false;
     try {
       await navigator.clipboard.writeText(publicViewUrl);
@@ -436,6 +456,70 @@ export default function HostView() {
     } else {
       setError('Could not copy the link. Select the URL and copy it manually.');
       setTimeout(() => setError(''), 4000);
+    }
+  };
+
+  const createAndActivateLiveRoom = async (message) => {
+    const credentials = createRoomCredentials();
+    const { error: createError } = await supabase.rpc('create_draw_room', {
+      p_room_id: credentials.roomId,
+      p_write_key: credentials.writeKey,
+    });
+    if (createError) throw createError;
+
+    saveRoomCredentials(credentials);
+    setLiveRoom(credentials);
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(''), 3500);
+  };
+
+  const startLiveRoom = async () => {
+    if (!isSupabaseConfigured) {
+      setError('Supabase is not configured. Add the two required environment variables and redeploy.');
+      setTimeout(() => setError(''), 5000);
+      return;
+    }
+
+    setRoomActionPending(true);
+    try {
+      await createAndActivateLiveRoom('Cross-device room started. Share the new public link.');
+    } catch (roomError) {
+      setError(roomError.message || 'Could not create a secure live room.');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setRoomActionPending(false);
+    }
+  };
+
+  const stopLiveRoom = async ({ startAnother = false } = {}) => {
+    if (!liveRoom || roomActionPending) return;
+    let roomClosed = false;
+    setRoomActionPending(true);
+    setError('');
+
+    try {
+      const { error: closeError } = await supabase.rpc('close_draw_room', {
+        p_room_id: liveRoom.roomId,
+        p_write_key: liveRoom.writeKey,
+      });
+      if (closeError) throw closeError;
+      roomClosed = true;
+
+      clearRoomCredentials();
+      setLiveRoom(null);
+      if (startAnother) {
+        await createAndActivateLiveRoom('A new cross-device room is ready. Share the new link.');
+      } else {
+        setSuccessMessage('Cross-device sharing stopped and the public room was removed.');
+        setTimeout(() => setSuccessMessage(''), 3500);
+      }
+    } catch (roomError) {
+      setError(roomError.message || (roomClosed && startAnother
+        ? 'The old room was closed, but a new room could not be created.'
+        : 'Could not close the live room.'));
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setRoomActionPending(false);
     }
   };
 
@@ -1466,17 +1550,43 @@ export default function HostView() {
                         <div className="space-y-5">
                             <div>
                                 <h3 className="text-lg font-bold text-[var(--text-color)]">Audience Public View</h3>
-                                <p className="text-sm text-[var(--text-muted)] mt-1">Open this link in another tab or window in the same browser profile, then move that window to your projector or second display.</p>
-                                <p className="text-xs text-amber-400 mt-2">Because the app stores data locally, live results do not sync to a separate phone or computer without a shared backend.</p>
+                                <p className="text-sm text-[var(--text-muted)] mt-1">Start a secure live room, then open its public link on phones, tablets, projectors, or another computer. Only public draw results and display details are synchronized.</p>
                             </div>
+                            {!isSupabaseConfigured ? (
+                                <div role="alert" className="rounded-lg border border-amber-500/60 bg-amber-500/10 p-3 text-sm">
+                                    <p className="font-semibold text-amber-300">Supabase setup required</p>
+                                    <p className="mt-1 text-[var(--text-muted)]">Run <code>supabase/schema.sql</code>, add <code>REACT_APP_SUPABASE_URL</code> and <code>REACT_APP_SUPABASE_PUBLISHABLE_KEY</code> to Vercel, then redeploy.</p>
+                                </div>
+                            ) : liveRoom ? (
+                                <div className="rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/40 p-3 space-y-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="font-semibold text-sm">Cross-device room</span>
+                                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${liveSync.status === 'live' ? 'bg-green-600 text-white' : liveSync.status === 'error' ? 'bg-red-600 text-white' : 'bg-amber-400 text-gray-900'}`}>{LIVE_SYNC_LABELS[liveSync.status] || liveSync.status}</span>
+                                    </div>
+                                    <p className="font-mono text-xs text-[var(--text-muted)] break-all">Room {liveRoom.roomId}</p>
+                                    {liveSync.errorMessage && <p role="alert" className="text-xs text-red-400">{liveSync.errorMessage}</p>}
+                                </div>
+                            ) : (
+                                <div className="rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/40 p-3">
+                                    <p className="text-sm text-[var(--text-muted)] mb-3">Cross-device sharing is currently off. A room automatically expires after seven days.</p>
+                                    <Button onClick={startLiveRoom} disabled={drawing || roomActionPending} className="w-full !bg-green-600 hover:!bg-green-700">Start Cross-Device Room</Button>
+                                </div>
+                            )}
                             <div>
                                 <label htmlFor="public-view-url" className="font-semibold text-sm mb-1 block">Public view URL</label>
-                                <Input id="public-view-url" type="text" readOnly value={buildPublicViewUrl(window.location.href)} onFocus={(event) => event.target.select()} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)] text-xs" />
+                                <Input id="public-view-url" type="text" readOnly value={publicViewUrl} onFocus={(event) => event.target.select()} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)] text-xs" />
+                                {!liveRoom && <p className="mt-1.5 text-xs text-amber-400">Without a room, this fallback link only updates inside the same browser profile.</p>}
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <Button onClick={handleCopyPublicViewUrl} className="w-full !bg-blue-600 hover:!bg-blue-700">Copy Link</Button>
-                                <a href={buildPublicViewUrl(window.location.href)} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg px-4 py-2 font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors">Open View</a>
+                                <a href={publicViewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg px-4 py-2 font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors">Open View</a>
                             </div>
+                            {liveRoom && (
+                                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[var(--panel-border)]">
+                                    <Button onClick={() => stopLiveRoom({ startAnother: true })} disabled={drawing || roomActionPending} className="w-full !bg-amber-600 hover:!bg-amber-700">New Room</Button>
+                                    <Button onClick={() => stopLiveRoom()} disabled={drawing || roomActionPending} className="w-full !bg-red-600 hover:!bg-red-700">Stop Sharing</Button>
+                                </div>
+                            )}
                         </div>
                     )}
                     {settingsTab === 'templates' && (

@@ -12,7 +12,7 @@ Lucky Draw Pro is a customizable React application for running live raffles, pri
 - Text and CSV participant import with duplicate cleanup
 - JSON session save/load and automatic browser-session restoration
 - Winners, assignments, and audit-log exports in CSV, JSON, and PNG formats
-- Synchronized public winners view using `BroadcastChannel` with a storage fallback
+- Cross-device public winners view using Supabase Realtime, with a same-browser fallback
 - Event themes, typography controls, logos, and custom background images
 - Animated LetterGlitch background for the default Event Night theme
 - Responsive layouts for desktop, tablets, phones, and public displays
@@ -22,6 +22,7 @@ Lucky Draw Pro is a customizable React application for running live raffles, pri
 - Node.js 18 or newer
 - npm
 - A modern browser with Canvas and local-storage support
+- A Supabase project for optional cross-device synchronization
 
 ## Getting Started
 
@@ -62,13 +63,30 @@ Open [http://localhost:3000](http://localhost:3000) in a browser.
 
 ### Public Winners View
 
-Open the app in a second tab and append this query parameter to the same page URL:
+For another tab in the same browser profile, open **Settings → Public View** and use the fallback public link. It includes this query parameter:
 
 ```text
 ?view=public
 ```
 
-Keep the host and public pages in the same browser profile and on the same origin so results can synchronize automatically. A separate phone or computer will need a shared backend before it can receive live results.
+For phones, tablets, projectors, and other computers, configure Supabase and select **Start Cross-Device Room**. Share the generated room link; winner and assignment updates will appear live. **Stop Sharing** closes the room and removes its public state.
+
+## Supabase Cross-Device Setup
+
+1. Create a Supabase project.
+2. Open the project’s SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql).
+3. Copy `.env.example` to `.env.local` and fill in the project URL and publishable key:
+
+```bash
+REACT_APP_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+REACT_APP_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
+```
+
+4. Restart `npm start` after changing local environment variables.
+5. For Vercel, add both variables in **Project Settings → Environment Variables**, then redeploy the app.
+6. Open **Settings → Public View**, start a room, and share its generated link.
+
+Use a Supabase publishable key in the browser. Never put a secret key or `service_role` key in a `REACT_APP_*` variable.
 
 ## Available Scripts
 
@@ -93,15 +111,18 @@ Creates an optimized production build in the `build/` directory.
 ```text
 src/
 ├── components/    Host, public display, shared UI, and visual effects
-├── hooks/         Audio, persistence, shortcuts, and public synchronization
+├── hooks/         Audio, persistence, shortcuts, and realtime synchronization
+├── lib/           Supabase client configuration
 ├── utils/         Parsing, validation, draw modes, templates, and exports
 ├── App.js         Host/public view routing
 └── index.js       React entry point
+supabase/
+└── schema.sql     Room tables, security policies, RPCs, and Realtime publication
 ```
 
 ## Data and Privacy
 
-Lucky Draw Pro runs locally in the browser. Session autosaves, participant data, logos, and custom backgrounds are stored in browser local storage. Exported files are created on the user’s device; the app does not require a backend service.
+Session autosaves, full participant lists, audit logs, custom backgrounds, and exports stay in the host browser. When cross-device sharing is enabled, Supabase receives only the event title, subtitle, a size-limited logo, public winner history, and public team/role results. Room write credentials remain in the host browser, and rooms expire automatically after seven days.
 
 ## Developer
 
