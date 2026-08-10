@@ -23,6 +23,22 @@ describe('parseEntries', () => {
     expect(result.entries).toEqual(['001', '002']);
     expect(result.duplicateGroups).toHaveLength(2);
   });
+
+  test('rejects non-numeric ticket values in numbers mode', () => {
+    const result = parseEntries('001, ticket-2, 003', 'numbers');
+    expect(result.entries).toEqual([]);
+    expect(result.error).toMatch(/digits only/);
+  });
+
+  test('rejects number ranges with partial numeric values', () => {
+    const result = parseEntries('1a-3', 'numbers');
+    expect(result.error).toMatch(/digits only/);
+  });
+
+  test('rejects a range whose end exceeds ten digits', () => {
+    const result = parseEntries('9999999999-10000000000', 'numbers');
+    expect(result.error).toMatch(/10 digits/);
+  });
 });
 
 describe('normalizeEntries', () => {

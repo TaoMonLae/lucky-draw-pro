@@ -22,6 +22,11 @@ describe('isValidSessionData', () => {
     expect(isValidSessionData({ initialEntries: 'oops' })).toBe(false);
   });
 
+  test('returns false when participant entries are not strings', () => {
+    expect(isValidSessionData({ initialEntries: ['A', { name: 'B' }] })).toBe(false);
+    expect(isValidSessionData({ initialEntries: ['A'], remainingEntries: [2] })).toBe(false);
+  });
+
   test('returns false when a prize is missing name', () => {
     expect(isValidSessionData({ initialEntries: [], prizes: [{ id: 1 }] })).toBe(false);
   });
@@ -52,6 +57,35 @@ describe('isValidSessionData', () => {
 
   test('returns false for invalid drawMode', () => {
     expect(isValidSessionData({ initialEntries: [], drawMode: 'quantum' })).toBe(false);
+  });
+
+  test('returns false for an unknown theme', () => {
+    expect(isValidSessionData({ initialEntries: [], theme: 'Missing Theme' })).toBe(false);
+  });
+
+  test('validates numeric draw settings', () => {
+    expect(isValidSessionData({ initialEntries: [], winnersPerPrize: 0 })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], maxDigits: 11 })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], winnersPerPrize: 2, maxDigits: 4 })).toBe(true);
+  });
+
+  test('rejects invalid assignment and eligibility settings', () => {
+    expect(isValidSessionData({ initialEntries: [], teamCount: 1 })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], teamCount: 4, winnerEligibilityMode: 'sometimes' })).toBe(false);
+  });
+
+  test('rejects invalid display and boolean field types', () => {
+    expect(isValidSessionData({ initialEntries: [], title: { text: 'Unsafe' } })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], logo: 42 })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], allowMultipleRoles: 'yes' })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], displayBoxWidth: 'wide' })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], masterVolume: 100 })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], masterVolume: '-6' })).toBe(true);
+  });
+
+  test('rejects malformed audit and assignment data', () => {
+    expect(isValidSessionData({ initialEntries: [], auditLog: [{ selected: 'A' }] })).toBe(false);
+    expect(isValidSessionData({ initialEntries: [], lastAssignmentResult: { mode: 'team-divider', teams: [{}] } })).toBe(false);
   });
 
   test('returns true with valid operationMode: standard', () => {

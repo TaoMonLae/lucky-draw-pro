@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as Tone from 'tone';
 import * as htmlToImage from 'html-to-image';
-import QRCode from 'qrcodejs2';
 import { themes, fonts } from '../utils/themeConfig';
 import { Button, Input, ConfettiParticle } from './ui';
 import { useSessionStorage } from '../hooks/useSessionStorage';
@@ -14,6 +13,7 @@ import { sessionTemplates } from '../utils/sessionTemplates';
 import { getPaddedDigits } from '../hooks/useDrawEngine';
 import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '../utils/drawModes';
 import { buildPublicViewUrl } from '../utils/publicViewUrl';
+import LetterGlitch from './LetterGlitch';
 
 const DISPLAY_DEFAULTS = {
   titleFont: 'sans-serif',
@@ -33,6 +33,8 @@ const DISPLAY_DEFAULTS = {
 };
 
 const AUDIO_DEFAULTS = { masterVolume: 0, sfxVolume: -6, musicVolume: 0 };
+const MAX_EMBEDDED_IMAGE_CHARS = 4_000_000;
+const LETTER_GLITCH_COLORS = ['#123044', '#06b6d4', '#facc15'];
 
 export default function HostView() {
   const [maxDigits, setMaxDigits] = useState(2);
@@ -56,7 +58,7 @@ export default function HostView() {
   ]);
   const [winnersPerPrize, setWinnersPerPrize] = useState(1);
   const [drawMode, setDrawMode] = useState('numbers');
-  const [scriptsLoaded, setScriptsLoaded] = useState({ htmlToImage: false, tone: false, qrcode: false });
+  const [scriptsLoaded, setScriptsLoaded] = useState({ tone: false });
   const [pulse, setPulse] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [winnerToExport, setWinnerToExport] = useState(null);
@@ -102,35 +104,36 @@ export default function HostView() {
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [lastAssignmentResult, setLastAssignmentResult] = useState(null);
   const [exportAssignmentTrigger, setExportAssignmentTrigger] = useState(false);
+  const [autosaveReady, setAutosaveReady] = useState(false);
 
   // Refs
   const timeoutRef = useRef(null);
   const chargeIntervalRef = useRef(null);
+  const chargeLockRef = useRef(false);
   const displayRef = useRef(null);
   const fileInputRef = useRef(null);
   const sessionInputRef = useRef(null);
   const csvInputRef = useRef(null);
   const logoInputRef = useRef(null);
   const bgImageInputRef = useRef(null);
+  const settingsButtonRef = useRef(null);
+  const settingsDialogRef = useRef(null);
   const exportRef = useRef(null);
   const exportAllRef = useRef(null);
   const exportAssignmentRef = useRef(null);
   const drawActionRef = useRef(() => {});
-  const qrCodeRef = useRef(null);
+  const drawLockRef = useRef(false);
   const audioStarted = useRef(false);
   const almostTriggered = useRef(false);
   const sfxVolumeNode = useRef(null);
   const musicVolumeNode = useRef(null);
   const tickSynth = useRef(null);
-  const winSynth = useRef(null);
-  const fireworkWhoosh = useRef(null);
-  const fireworkCrackle = useRef(null);
   const drumrollSynth = useRef(null);
   const applauseSynth = useRef(null);
   const whistleSynth = useRef(null);
   const wowSynth = useRef(null);
 
-  const appState = {
+  const appState = useMemo(() => ({
     initialEntries, remainingEntries, winnersHistory,
     prizes, winnersPerPrize, inputValue, maxDigits, theme, logo,
     title, subtitle, titleLineSpacing, subtitleLineSpacing,
@@ -141,87 +144,125 @@ export default function HostView() {
     displayFont, displayFontSize, displayLineHeight, displayLetterSpacing,
     displayBoxWidth, displayBoxHeight,
     operationMode, teamCount, roleConfigText, allowMultipleRoles,
-    winnerEligibilityMode, noRepeatAcrossPrizes, auditLog
-  };
-
-  useSessionStorage('lucky-draw-autosave', appState);
+    winnerEligibilityMode, noRepeatAcrossPrizes, auditLog,
+    lastAssignmentResult
+  }), [
+    initialEntries, remainingEntries, winnersHistory, prizes, winnersPerPrize,
+    inputValue, maxDigits, theme, logo, title, subtitle, titleLineSpacing,
+    subtitleLineSpacing, titleLetterSpacing, subtitleLetterSpacing, backgroundImage,
+    masterVolume, sfxVolume, musicVolume, titleColor, subtitleColor, titleFont,
+    subtitleFont, titleFontSize, subtitleFontSize, drawMode, displayFont,
+    displayFontSize, displayLineHeight, displayLetterSpacing, displayBoxWidth,
+    displayBoxHeight, operationMode, teamCount, roleConfigText, allowMultipleRoles,
+    winnerEligibilityMode, noRepeatAcrossPrizes, auditLog, lastAssignmentResult
+  ]);
 
   // --- SESSION MANAGEMENT ---
 
-  const restoreSession = (data) => {
+  const restoreSession = (data, { announce = true } = {}) => {
     try {
         if (!isValidSessionData(data)) {
             throw new Error("Invalid session data structure.");
         }
-        setInitialEntries(data.initialEntries || []);
-        setRemainingEntries(data.remainingEntries || []);
-        setWinnersHistory(data.winnersHistory || []);
-        setPrizes(data.prizes || [{ id: 1, name: '3rd Prize' }, { id: 2, name: '2nd Prize' }, { id: 3, name: '1st Prize' }]);
-        setInputValue(data.inputValue || '1-50');
-        const restoredMaxDigits = data.maxDigits || 2;
+        setInitialEntries(data.initialEntries ?? []);
+        setRemainingEntries(data.remainingEntries ?? data.initialEntries ?? []);
+        setWinnersHistory(data.winnersHistory ?? []);
+        setPrizes(data.prizes ?? [{ id: 1, name: '3rd Prize' }, { id: 2, name: '2nd Prize' }, { id: 3, name: '1st Prize' }]);
+        setInputValue(data.inputValue ?? data.initialEntries.join(', '));
+        const restoredMaxDigits = data.maxDigits ?? 2;
         setMaxDigits(restoredMaxDigits);
-        setTitle(data.title || 'Live Lucky Draw');
-        setSubtitle(data.subtitle || 'The most exciting draw on the web!');
-        setTitleLineSpacing(data.titleLineSpacing || 1.2);
-        setSubtitleLineSpacing(data.subtitleLineSpacing || 1.5);
+        setTitle(data.title ?? 'Live Lucky Draw');
+        setSubtitle(data.subtitle ?? 'The most exciting draw on the web!');
+        setTitleLineSpacing(data.titleLineSpacing ?? 1.2);
+        setSubtitleLineSpacing(data.subtitleLineSpacing ?? 1.5);
         setTitleLetterSpacing(data.titleLetterSpacing ?? 0);
         setSubtitleLetterSpacing(data.subtitleLetterSpacing ?? 0);
-        setTitleFontSize(data.titleFontSize || 48);
-        setSubtitleFontSize(data.subtitleFontSize || 16);
-        setWinnersPerPrize(data.winnersPerPrize || 1);
-        setTheme(data.theme || 'Event Night');
-        setLogo(data.logo || null);
-        setBackgroundImage(data.backgroundImage || '');
-        setMasterVolume(data.masterVolume ?? 0);
-        setSfxVolume(data.sfxVolume ?? -6);
-        setMusicVolume(data.musicVolume ?? 0);
-        setTitleColor(data.titleColor || '');
-        setSubtitleColor(data.subtitleColor || '');
-        setTitleFont(data.titleFont || 'sans-serif');
-        setSubtitleFont(data.subtitleFont || 'sans-serif');
-        setDisplayFont(data.displayFont || "'Roboto Mono', 'Noto Sans Myanmar', monospace");
-        setDisplayFontSize(data.displayFontSize || 92);
-        setDisplayLineHeight(data.displayLineHeight || 1.02);
+        setTitleFontSize(data.titleFontSize ?? 48);
+        setSubtitleFontSize(data.subtitleFontSize ?? 16);
+        setWinnersPerPrize(data.winnersPerPrize ?? 1);
+        setTheme(data.theme ?? 'Event Night');
+        setLogo(data.logo ?? null);
+        setBackgroundImage(data.backgroundImage ?? '');
+        setMasterVolume(Number(data.masterVolume ?? 0));
+        setSfxVolume(Number(data.sfxVolume ?? -6));
+        setMusicVolume(Number(data.musicVolume ?? 0));
+        setTitleColor(data.titleColor ?? '');
+        setSubtitleColor(data.subtitleColor ?? '');
+        setTitleFont(data.titleFont ?? 'sans-serif');
+        setSubtitleFont(data.subtitleFont ?? 'sans-serif');
+        setDisplayFont(data.displayFont ?? "'Roboto Mono', 'Noto Sans Myanmar', monospace");
+        setDisplayFontSize(data.displayFontSize ?? 92);
+        setDisplayLineHeight(data.displayLineHeight ?? 1.02);
         setDisplayLetterSpacing(data.displayLetterSpacing ?? 0.1);
-        setDisplayBoxWidth(data.displayBoxWidth || 480);
-        setDisplayBoxHeight(data.displayBoxHeight || 180);
-        setDrawMode(data.drawMode || 'numbers');
-        setOperationMode(data.operationMode || 'standard');
-        setTeamCount(data.teamCount || 2);
-        setRoleConfigText(data.roleConfigText || 'Host:1\nJudge:2');
+        setDisplayBoxWidth(data.displayBoxWidth ?? 480);
+        setDisplayBoxHeight(data.displayBoxHeight ?? 180);
+        setDrawMode(data.drawMode ?? 'numbers');
+        setOperationMode(data.operationMode ?? 'standard');
+        setTeamCount(data.teamCount ?? 2);
+        setRoleConfigText(data.roleConfigText ?? 'Host:1\nJudge:2');
         setAllowMultipleRoles(Boolean(data.allowMultipleRoles));
-        setWinnerEligibilityMode(data.winnerEligibilityMode || 'remove');
+        setWinnerEligibilityMode(data.winnerEligibilityMode ?? 'remove');
         setNoRepeatAcrossPrizes(Boolean(data.noRepeatAcrossPrizes));
         setAuditLog(Array.isArray(data.auditLog) ? data.auditLog : []);
+        setLastAssignmentResult(data.lastAssignmentResult || null);
         const firstEntry = (data.remainingEntries && data.remainingEntries[0]) || (data.initialEntries && data.initialEntries[0]) || '1';
         setDisplayValue(firstEntry);
-        setSuccessMessage('Session restored successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
+        if (announce) {
+            setSuccessMessage('Session restored successfully!');
+            setTimeout(() => setSuccessMessage(''), 3000);
+        }
     } catch (err) {
         setError('Invalid or corrupted session file.');
         setTimeout(() => setError(''), 3000);
     }
   };
 
+  useEffect(() => {
+    try {
+      const savedState = localStorage.getItem('lucky-draw-autosave');
+      if (savedState) {
+        const parsedState = JSON.parse(savedState);
+        if (isValidSessionData(parsedState)) {
+          restoreSession(parsedState, { announce: false });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to restore autosaved session', err);
+    } finally {
+      setAutosaveReady(true);
+    }
+  // Restore only once before autosave is enabled.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useSessionStorage('lucky-draw-autosave', appState, autosaveReady);
+
   // Script and Audio Setup
   useAudioEngine({ setScriptsLoaded });
 
   useEffect(() => {
-    if (scriptsLoaded.tone && !tickSynth.current) {
-        sfxVolumeNode.current = new Tone.Volume(sfxVolume).toDestination();
-        musicVolumeNode.current = new Tone.Volume(musicVolume).toDestination();
+    if (!scriptsLoaded.tone || tickSynth.current) return undefined;
 
-        tickSynth.current = new Tone.MembraneSynth().connect(sfxVolumeNode.current);
-        fireworkWhoosh.current = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.005, decay: 0.3, sustain: 0 } }).connect(sfxVolumeNode.current);
-        fireworkCrackle.current = new Tone.MetalSynth({ frequency: 200, envelope: { attack: 0.001, decay: 0.1, release: 0.01 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(sfxVolumeNode.current);
-        drumrollSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(sfxVolumeNode.current);
+    sfxVolumeNode.current = new Tone.Volume(0).toDestination();
+    musicVolumeNode.current = new Tone.Volume(0).toDestination();
 
-        winSynth.current = new Tone.PolySynth(Tone.Synth).connect(musicVolumeNode.current);
-        applauseSynth.current = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0 }}).connect(sfxVolumeNode.current);
-        whistleSynth.current = new Tone.Synth({ oscillator: { type: 'triangle8' }, envelope: { attack: 0.01, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(sfxVolumeNode.current);
-        wowSynth.current = new Tone.FMSynth({ harmonicity: 2, modulationIndex: 8, envelope: { attack: 0.03, decay: 0.2, sustain: 0.08, release: 0.4 } }).connect(sfxVolumeNode.current);
-    }
-  }, [scriptsLoaded.tone, sfxVolume, musicVolume]);
+    tickSynth.current = new Tone.MembraneSynth().connect(sfxVolumeNode.current);
+    drumrollSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(sfxVolumeNode.current);
+    applauseSynth.current = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0 }}).connect(musicVolumeNode.current);
+    whistleSynth.current = new Tone.Synth({ oscillator: { type: 'triangle8' }, envelope: { attack: 0.01, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(musicVolumeNode.current);
+    wowSynth.current = new Tone.FMSynth({ harmonicity: 2, modulationIndex: 8, envelope: { attack: 0.03, decay: 0.2, sustain: 0.08, release: 0.4 } }).connect(musicVolumeNode.current);
+
+    return () => {
+      [tickSynth, drumrollSynth, applauseSynth, whistleSynth, wowSynth].forEach((ref) => {
+        ref.current?.dispose();
+        ref.current = null;
+      });
+      [sfxVolumeNode, musicVolumeNode].forEach((ref) => {
+        ref.current?.dispose();
+        ref.current = null;
+      });
+    };
+  }, [scriptsLoaded.tone]);
 
   useEffect(() => {
     Tone.Destination.volume.value = masterVolume;
@@ -241,17 +282,35 @@ export default function HostView() {
   }, []);
 
   useEffect(() => {
-    if (settingsTab === 'jumbotron' && scriptsLoaded.qrcode && qrCodeRef.current) {
-        qrCodeRef.current.innerHTML = '';
-        new QRCode(qrCodeRef.current, {
-            text: buildPublicViewUrl(window.location.href),
-            width: 192,
-            height: 192,
-            colorDark: themes[theme]['--text-color'],
-            colorLight: themes[theme]['--bg-color'],
-        });
-    }
-  }, [settingsTab, scriptsLoaded.qrcode, theme]);
+    if (!showSettings || !settingsDialogRef.current) return undefined;
+
+    const dialog = settingsDialogRef.current;
+    const settingsButton = settingsButtonRef.current;
+    const focusableSelector = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusableElements = () => Array.from(dialog.querySelectorAll(focusableSelector));
+    focusableElements()[0]?.focus();
+
+    const trapFocus = (event) => {
+      if (event.key !== 'Tab') return;
+      const elements = focusableElements();
+      if (elements.length === 0) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    dialog.addEventListener('keydown', trapFocus);
+    return () => {
+      dialog.removeEventListener('keydown', trapFocus);
+      settingsButton?.focus();
+    };
+  }, [showSettings]);
 
   // Logic Functions
   const getPrizeName = () => {
@@ -294,6 +353,7 @@ export default function HostView() {
     setDisplayValue(firstEntry);
     setError('');
     setShowConfetti(false);
+    setLastAssignmentResult(null);
   };
   
   const handleUndo = () => {
@@ -310,6 +370,7 @@ export default function HostView() {
       setDisplayValue(lastWinnerGroup.tickets[0]);
     } else {
       setDisplayValue(initialEntries[0] || 'Ready');
+      setLastAssignmentResult(null);
     }
 
     setError('');
@@ -327,7 +388,8 @@ export default function HostView() {
         displayFont, displayFontSize, displayLineHeight, displayLetterSpacing,
         displayBoxWidth, displayBoxHeight,
         operationMode, teamCount, roleConfigText, allowMultipleRoles,
-        winnerEligibilityMode, noRepeatAcrossPrizes, auditLog
+        winnerEligibilityMode, noRepeatAcrossPrizes, auditLog,
+        lastAssignmentResult
     };
     downloadJson('lucky-draw-session.json', appState);
   };
@@ -350,6 +412,33 @@ export default function HostView() {
     downloadCsv(`${title.replace(/\s+/g, '-')}-${suffix}.csv`, buildAssignmentCsvRows(lastAssignmentResult));
   };
 
+  const handleCopyPublicViewUrl = async () => {
+    const publicViewUrl = buildPublicViewUrl(window.location.href);
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(publicViewUrl);
+      copied = true;
+    } catch {
+      const textArea = document.createElement('textarea');
+      textArea.value = publicViewUrl;
+      textArea.setAttribute('readonly', '');
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      copied = document.execCommand('copy');
+      textArea.remove();
+    }
+
+    if (copied) {
+      setSuccessMessage('Public view link copied!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } else {
+      setError('Could not copy the link. Select the URL and copy it manually.');
+      setTimeout(() => setError(''), 4000);
+    }
+  };
+
   const applyTemplate = (template) => {
     const s = template.settings;
     if (s.title !== undefined) setTitle(s.title);
@@ -364,6 +453,7 @@ export default function HostView() {
     if (s.teamCount !== undefined) setTeamCount(s.teamCount);
     if (s.roleConfigText !== undefined) setRoleConfigText(s.roleConfigText);
     if (s.allowMultipleRoles !== undefined) setAllowMultipleRoles(s.allowMultipleRoles);
+    resetDraw(initialEntries);
     setSuccessMessage(`Template "${template.label}" loaded!`);
     setTimeout(() => setSuccessMessage(''), 3000);
   };
@@ -421,6 +511,11 @@ export default function HostView() {
             return;
         }
 
+        if (parsed.entries.length > 40000) {
+            setError('Too many entries. Please provide 40,000 or less.');
+            return;
+        }
+
         setInputValue(parsed.entries.join(', '));
         processEntries(parsed.entries, { duplicateGroups: parsed.duplicateGroups, blankCount: parsed.blankCount });
     };
@@ -435,6 +530,11 @@ export default function HostView() {
 
     reader.onload = (event) => {
       const parsed = parseEntriesFromCsv(event.target.result, drawMode);
+      if (parsed.error) {
+        setError(parsed.error);
+        return;
+      }
+
       if (parsed.entries.length < 1) {
         setError('CSV file does not contain valid entries.');
         return;
@@ -502,10 +602,16 @@ export default function HostView() {
     if (file) {
         const reader = new FileReader();
         reader.onload = (event) => {
-            setLogo(event.target.result);
+            const nextLogo = event.target.result;
+            if (nextLogo.length + backgroundImage.length > MAX_EMBEDDED_IMAGE_CHARS) {
+                setError('Logo and background images are too large to autosave. Please use smaller image files.');
+                return;
+            }
+            setLogo(nextLogo);
         };
         reader.readAsDataURL(file);
     }
+    e.target.value = null;
   };
   
   const handleBgImageUpload = (e) => {
@@ -513,10 +619,16 @@ export default function HostView() {
     if (file) {
         const reader = new FileReader();
         reader.onload = (event) => {
-            setBackgroundImage(event.target.result);
+            const nextBackgroundImage = event.target.result;
+            if (nextBackgroundImage.length + (logo?.length || 0) > MAX_EMBEDDED_IMAGE_CHARS) {
+                setError('Logo and background images are too large to autosave. Please use smaller image files.');
+                return;
+            }
+            setBackgroundImage(nextBackgroundImage);
         };
         reader.readAsDataURL(file);
     }
+    e.target.value = null;
   };
   
   const playDrumroll = () => {
@@ -559,42 +671,55 @@ export default function HostView() {
   };
 
   const startCharging = async () => {
-    if (drawing || isCharging || remainingEntries.length === 0 || winnersHistory.length >= prizes.length) return;
+    if (drawing || drawLockRef.current || chargeLockRef.current || isCharging || getEligibleEntries(remainingEntries).length === 0 || winnersHistory.length >= prizes.length) return;
+    chargeLockRef.current = true;
 
-    await ensureAudioStarted();
+    try {
+      await ensureAudioStarted();
+    } catch (err) {
+      chargeLockRef.current = false;
+      setError('Audio could not start. Please try again.');
+      return;
+    }
 
     clearInterval(chargeIntervalRef.current);
 
     setIsCharging(true);
+    let nextCharge = 0;
     chargeIntervalRef.current = setInterval(() => {
-        setCharge(prev => {
-            const newCharge = prev + 2;
-            if (tickSynth.current) {
-                const pitch = 40 + (newCharge * 1.5);
-                tickSynth.current.triggerAttackRelease(pitch, "8n");
-            }
-            if (newCharge >= 100) {
-                clearInterval(chargeIntervalRef.current);
-                setIsCharging(false);
-                setCharge(0);
-                drawNextWinner();
-                return 100;
-            }
-            return newCharge;
-        });
+        nextCharge = Math.min(100, nextCharge + 2);
+        setCharge(nextCharge);
+        if (tickSynth.current) {
+            const pitch = 40 + (nextCharge * 1.5);
+            tickSynth.current.triggerAttackRelease(pitch, "8n");
+        }
+        if (nextCharge >= 100) {
+            clearInterval(chargeIntervalRef.current);
+            chargeLockRef.current = false;
+            setIsCharging(false);
+            setCharge(0);
+            drawNextWinner();
+        }
     }, 30);
   };
 
   const stopCharging = () => {
     clearInterval(chargeIntervalRef.current);
+    chargeLockRef.current = false;
     setIsCharging(false);
     setCharge(0);
+  };
+
+  const getEligibleEntries = (pool) => {
+    const blocked = noRepeatAcrossPrizes ? getNoRepeatSet(auditLog) : new Set();
+    return pool.filter((entry) => !blocked.has(entry));
   };
 
   const runSingleWinnerAnimation = (winnerEntry, isFinalWinnerOfBatch) => {
     return new Promise((resolve) => {
         const isFinalPrize = winnersHistory.length + 1 === prizes.length;
-        const slowMoDuration = isFinalPrize && isFinalWinnerOfBatch ? 14000 : 4000;
+        const isGrandFinal = isFinalPrize && isFinalWinnerOfBatch;
+        const slowMoDuration = isGrandFinal ? 14000 : 4000;
         let finished = false;
 
         const finishAnimation = () => {
@@ -632,7 +757,7 @@ export default function HostView() {
             const winnerDigits = getDigits(winnerEntry);
             const reelConfigs = winnerDigits.map((_, index) => {
                 const start = index * 550;
-                const duration = isFinalPrize && isFinalWinnerOfBatch
+                const duration = isGrandFinal
                     ? 2800 + index * 650
                     : 1300 + index * 350;
                 return { start, duration };
@@ -646,7 +771,7 @@ export default function HostView() {
                 const elapsed = Date.now() - animationStart;
                 let nextDelay = 75;
 
-                if (elapsed >= animationTotalDuration + (isFinalPrize ? 700 : 300)) {
+                if (elapsed >= animationTotalDuration + (isGrandFinal ? 700 : 300)) {
                     setDisplayValue(winnerDigits.join(''));
                     finishAnimation();
                     return;
@@ -662,7 +787,7 @@ export default function HostView() {
 
                     const progress = reelElapsed / reel.duration;
                     const easing = 1 - Math.pow(1 - progress, 3);
-                    const totalSteps = isFinalPrize ? 24 : 14;
+                    const totalSteps = isGrandFinal ? 24 : 14;
                     const currentStep = Math.floor(easing * totalSteps);
                     const finalDigit = parseInt(digit, 10);
                     return Number.isNaN(finalDigit)
@@ -670,7 +795,7 @@ export default function HostView() {
                         : (finalDigit + totalSteps - currentStep) % 10;
                 });
 
-                if (isFinalPrize && !almostTriggered.current && elapsed >= animationTotalDuration - 1100) {
+                if (isGrandFinal && !almostTriggered.current && elapsed >= animationTotalDuration - 1100) {
                     almostTriggered.current = true;
                     const finalDigitIndex = maxDigits - 1;
                     const finalDigit = parseInt(winnerDigits[finalDigitIndex], 10);
@@ -705,11 +830,14 @@ export default function HostView() {
     .filter((role) => role.name && role.count > 0);
 
   const drawNextWinner = async () => {
-    await ensureAudioStarted();
+    if (drawLockRef.current || drawing) return;
+    drawLockRef.current = true;
+
+    try {
+      await ensureAudioStarted();
 
     if (operationMode !== 'standard') {
-      const blocked = noRepeatAcrossPrizes ? getNoRepeatSet(auditLog) : new Set();
-      const eligible = initialEntries.filter((entry) => !blocked.has(entry));
+      const eligible = getEligibleEntries(initialEntries);
       if (eligible.length === 0) {
         setError('No eligible participants left for this mode.');
         return;
@@ -718,7 +846,8 @@ export default function HostView() {
       if (operationMode === 'team-divider') {
         const teams = divideIntoTeams(eligible, teamCount);
         const selected = teams.flatMap((team) => team.members);
-        setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'team-divider', context: `${teams.length} teams`, selected, remainingCount: eligible.length })]);
+        const remainingCount = noRepeatAcrossPrizes ? eligible.length - new Set(selected).size : eligible.length;
+        setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'team-divider', context: `${teams.length} teams`, selected, remainingCount })]);
         setLastAssignmentResult({ mode: 'team-divider', teams });
         setCurrentPrize(`Team Divider (${teams.length} teams)`);
         setDrawing(true);
@@ -729,7 +858,6 @@ export default function HostView() {
             await new Promise((resolve) => setTimeout(resolve, 2500));
           }
         }
-        setDrawing(false);
         return;
       }
 
@@ -738,9 +866,15 @@ export default function HostView() {
         setError('Add at least one valid role in Role:Count format.');
         return;
       }
+      const requestedRoleCount = roleRules.reduce((sum, role) => sum + role.count, 0);
+      if (!allowMultipleRoles && requestedRoleCount > eligible.length) {
+        setError(`Not enough eligible participants: ${requestedRoleCount} role slots requested for ${eligible.length} participants.`);
+        return;
+      }
       const assignments = assignRoles(eligible, roleRules, { allowMultipleRoles });
       const selected = assignments.flatMap((role) => role.participants);
-      setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'role-selector', context: `${assignments.length} roles`, selected, remainingCount: eligible.length })]);
+      const remainingCount = noRepeatAcrossPrizes ? eligible.length - new Set(selected).size : eligible.length;
+      setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'role-selector', context: `${assignments.length} roles`, selected, remainingCount })]);
       setLastAssignmentResult({ mode: 'role-selector', assignments });
       setCurrentPrize('Role Selector');
       setDrawing(true);
@@ -751,12 +885,10 @@ export default function HostView() {
           await new Promise((resolve) => setTimeout(resolve, 2500));
         }
       }
-      setDrawing(false);
       return;
     }
 
-    const blocked = noRepeatAcrossPrizes ? getNoRepeatSet(auditLog) : new Set();
-    const sourcePool = remainingEntries.filter((entry) => !blocked.has(entry));
+    const sourcePool = getEligibleEntries(remainingEntries);
     const numToDraw = Math.min(winnersPerPrize, sourcePool.length);
     if (drawing || numToDraw === 0 || winnersHistory.length >= prizes.length) {
         if (sourcePool.length === 0) setError('All entries have been drawn!');
@@ -768,6 +900,7 @@ export default function HostView() {
     setError('');
     setShowConfetti(false);
     setPulse(true);
+    almostTriggered.current = false;
 
     const currentPrizeName = getPrizeName();
     setCurrentPrize(currentPrizeName);
@@ -793,18 +926,29 @@ export default function HostView() {
       : remainingEntries.filter((entry) => !drawnTickets.includes(entry));
 
     setRemainingEntries(nextRemaining);
-    setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'standard', context: currentPrizeName, selected: drawnTickets, remainingCount: nextRemaining.length })]);
+    const nextEligibleCount = noRepeatAcrossPrizes ? sourcePool.length - drawnTickets.length : nextRemaining.length;
+    setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'standard', context: currentPrizeName, selected: drawnTickets, remainingCount: nextEligibleCount })]);
     setShowConfetti(true);
     playCelebration();
     setTimeout(() => setShowConfetti(false), 5000);
-    setDrawing(false);
+    } catch (err) {
+      console.error('Draw failed', err);
+      setError('The draw could not be completed. Please try again.');
+    } finally {
+      drawLockRef.current = false;
+      setDrawing(false);
+    }
   };
 
   drawActionRef.current = drawNextWinner;
 
   useEffect(() => {
     const handleShortcuts = (event) => {
-      if (showSettings || event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+      if (showSettings) {
+        if (event.key === 'Escape') setShowSettings(false);
+        return;
+      }
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
       if (event.code === 'Space') {
         event.preventDefault();
         drawActionRef.current();
@@ -897,13 +1041,24 @@ export default function HostView() {
     return () => {
         clearTimeout(timeoutRef.current);
         clearInterval(chargeIntervalRef.current);
+        chargeLockRef.current = false;
+        drawLockRef.current = false;
     };
   }, []);
 
   const currentTheme = themes[theme];
-  const drawProgress = initialEntries.length ? Math.round((winnersHistory.reduce((sum, group) => sum + group.tickets.length, 0) / initialEntries.length) * 100) : 0;
-  const canDraw = !drawing && remainingEntries.length > 0 && winnersHistory.length < prizes.length;
-  const quickStatus = canDraw ? 'Ready for next draw' : drawing ? 'Drawing in progress...' : 'Draw completed';
+  const activePool = operationMode === 'standard' ? remainingEntries : initialEntries;
+  const eligibleEntryCount = getEligibleEntries(activePool).length;
+  const drawProgress = operationMode === 'standard' && prizes.length
+    ? Math.min(100, Math.round((winnersHistory.length / prizes.length) * 100))
+    : 0;
+  const hasPrizeRemaining = operationMode !== 'standard' || winnersHistory.length < prizes.length;
+  const canDraw = !drawing && eligibleEntryCount > 0 && hasPrizeRemaining;
+  const quickStatus = drawing
+    ? 'Drawing in progress...'
+    : canDraw
+      ? operationMode === 'standard' ? 'Ready for next draw' : 'Ready to run assignment'
+      : eligibleEntryCount === 0 ? 'No eligible entries' : 'Draw completed';
 
   // Auto-expand display box for names in Standard Draw Mode
   const isStandardNames = operationMode === 'standard' && drawMode === 'names';
@@ -918,15 +1073,31 @@ export default function HostView() {
   const displayNameFontSize = isStandardNames
     ? `clamp(1.5rem, ${scaledNameFontRem}rem, 6rem)`
     : `clamp(2rem, ${maxNameFontRem}rem, 6rem)`;
+  const numberFontRem = Math.min(displayFontSize, Math.max(28, (displayBoxWidth - 48) / Math.max(maxDigits, 1))) / 16;
+  const numberViewportMax = Math.min(24, 80 / Math.max(maxDigits, 1));
+  const displayNumberFontSize = `clamp(1.75rem, ${numberFontRem}rem, ${numberViewportMax}vw)`;
   const mainStyle = {
     ...currentTheme,
     backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
   };
+  const showLetterGlitch = theme === 'Event Night' && !backgroundImage;
 
   return (
-    <div style={mainStyle} className="relative flex flex-col items-center justify-center min-h-screen text-[var(--text-color)] p-4 gap-6 font-sans overflow-hidden transition-all duration-500 bg-[var(--bg-color)]">
+    <div style={mainStyle} className="relative flex flex-col items-center justify-center min-h-screen text-[var(--text-color)] p-4 pb-20 sm:pb-4 gap-3 sm:gap-6 font-sans overflow-hidden transition-all duration-500 bg-[var(--bg-color)]">
+      {showLetterGlitch && (
+        <div className="pointer-events-none absolute inset-0 z-0">
+          <LetterGlitch
+            glitchColors={LETTER_GLITCH_COLORS}
+            glitchSpeed={50}
+            centerVignette
+            outerVignette={false}
+            smooth
+          />
+          <div className="absolute inset-0 bg-black/60" />
+        </div>
+      )}
       <AnimatePresence>
         {showConfetti && (
           <motion.div
@@ -944,23 +1115,23 @@ export default function HostView() {
        {logo && <img src={logo} alt="Event Logo" className="absolute top-4 left-4 h-16 w-auto z-30" />}
        
        {successMessage && (
-        <div className="absolute top-0 left-0 right-0 bg-green-600 text-white p-2 flex justify-center items-center gap-4 z-50">
+        <div role="status" aria-live="polite" className="absolute top-0 left-0 right-0 bg-green-600 text-white p-2 flex justify-center items-center gap-4 z-50">
             <span>{successMessage}</span>
-            <Button onClick={() => setSuccessMessage('')} className="!bg-transparent !text-white text-lg !py-0 !px-2">&times;</Button>
+            <Button aria-label="Dismiss success message" onClick={() => setSuccessMessage('')} className="!bg-transparent !text-white text-lg !py-0 !px-2">&times;</Button>
         </div>
        )}
        {error && (
-        <div className="absolute top-0 left-0 right-0 bg-red-600 text-white p-2 flex justify-center items-center gap-4 z-50">
+        <div role="alert" className="absolute top-0 left-0 right-0 bg-red-600 text-white p-2 flex justify-center items-center gap-4 z-50">
             <span>Error: {error}</span>
-            <Button onClick={() => setError('')} className="!bg-transparent !text-white text-lg !py-0 !px-2">&times;</Button>
+            <Button aria-label="Dismiss error message" onClick={() => setError('')} className="!bg-transparent !text-white text-lg !py-0 !px-2">&times;</Button>
         </div>
        )}
 
-      <Button onClick={() => setShowSettings(true)} className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 !bg-gray-700 hover:!bg-gray-600 !p-2 sm:!p-3">
+      <Button ref={settingsButtonRef} aria-label="Open settings" onClick={() => setShowSettings(true)} className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 !bg-gray-700 hover:!bg-gray-600 !p-2 sm:!p-3">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.73l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.73l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </Button>
 
-      <div className="fixed bottom-3 right-3 sm:absolute sm:top-4 sm:left-1/2 sm:bottom-auto sm:right-auto sm:-translate-x-1/2 z-30 w-[min(78vw,320px)] sm:w-[min(900px,95vw)] rounded-xl sm:rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-3 sm:px-4 py-2 sm:py-3 shadow-xl">
+      <div className="fixed bottom-2 right-2 sm:absolute sm:top-4 sm:left-1/2 sm:bottom-auto sm:right-auto sm:-translate-x-1/2 z-30 w-[min(78vw,320px)] sm:w-[min(900px,95vw)] rounded-xl sm:rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-3 shadow-xl">
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 text-xs sm:text-sm">
           <div>
             <p className="font-semibold">{quickStatus}</p>
@@ -971,36 +1142,51 @@ export default function HostView() {
             <p style={{ color: 'var(--text-muted)' }} className="hidden sm:block">Shortcut: Space draw · S settings · F fullscreen</p>
           </div>
         </div>
-        <div className="mt-2 sm:mt-3 h-1.5 sm:h-2 rounded-full" style={{ backgroundColor: 'var(--panel-border)' }}>
-          <div className="h-2 rounded-full transition-all duration-700" style={{ width: `${drawProgress}%`, backgroundColor: 'var(--button-action-bg)' }} />
+        <div className="mt-1 sm:mt-3 h-1.5 sm:h-2 rounded-full" style={{ backgroundColor: 'var(--panel-border)' }}>
+          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${drawProgress}%`, backgroundColor: 'var(--button-action-bg)' }} />
         </div>
       </div>
 
       <AnimatePresence>
                 {showSettings && (
+            <>
+            <motion.button
+                type="button"
+                aria-label="Close settings overlay"
+                initial={{opacity: 0}}
+                animate={{opacity: 1}}
+                exit={{opacity: 0}}
+                onClick={() => setShowSettings(false)}
+                className="fixed inset-0 z-40 bg-black/40 cursor-default"
+            />
             <motion.div 
+                ref={settingsDialogRef}
                 initial={{x: '100%'}}
                 animate={{x: 0}}
                 exit={{x: '100%'}}
                 transition={{type: 'spring', stiffness: 300, damping: 30}}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="settings-title"
                 className="absolute top-0 right-0 h-full w-full max-w-md bg-[var(--panel-bg)] backdrop-blur-sm shadow-2xl z-50 border-l border-[var(--panel-border)] flex flex-col"
             >
-                <div className="flex-shrink-0 p-6">
+                <div className="flex-shrink-0 p-4 sm:p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-[var(--title-color)]">Settings</h2>
-                        <Button onClick={() => setShowSettings(false)} style={{backgroundColor: '#dc2626'}}>
+                        <h2 id="settings-title" className="text-2xl font-bold text-[var(--title-color)]">Settings</h2>
+                        <Button aria-label="Close settings" onClick={() => setShowSettings(false)} style={{backgroundColor: '#dc2626'}}>
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         </Button>
                     </div>
-                    <div className="flex border-b border-[var(--panel-border)] mb-4">
-                        <button className={`py-2 px-4 ${settingsTab === 'main' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('main')}>Main</button>
-                        <button className={`py-2 px-4 ${settingsTab === 'sound' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('sound')}>Sound</button>
-                        <button className={`py-2 px-4 ${settingsTab === 'templates' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('templates')}>Templates</button>
-                        <button className={`py-2 px-4 ${settingsTab === 'about' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('about')}>About</button>
+                    <div role="group" aria-label="Settings sections" className="grid grid-cols-5 border-b border-[var(--panel-border)] mb-4 text-[11px] sm:text-sm">
+                        <button type="button" aria-pressed={settingsTab === 'main'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'main' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('main')}>Main</button>
+                        <button type="button" aria-pressed={settingsTab === 'sound'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'sound' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('sound')}>Sound</button>
+                        <button type="button" aria-pressed={settingsTab === 'public'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'public' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('public')}>Public</button>
+                        <button type="button" aria-pressed={settingsTab === 'templates'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'templates' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('templates')}>Presets</button>
+                        <button type="button" aria-pressed={settingsTab === 'about'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'about' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('about')}>About</button>
                     </div>
                 </div>
                 
-                <div className="flex-grow overflow-y-auto px-6 pb-6">
+                <div className="flex-grow overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">
                     {settingsTab === 'main' && (
                         <div className="space-y-6">
                             <div>
@@ -1097,7 +1283,7 @@ export default function HostView() {
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Participant Type</label>
-                                <select value={drawMode} onChange={(e) => setDrawMode(e.target.value)} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm mb-2">
+                                <select value={drawMode} onChange={(e) => setDrawMode(e.target.value)} disabled={drawing} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm mb-2 disabled:opacity-50">
                                     <option value="numbers">Numbers</option>
                                     <option value="names">Names</option>
                                 </select>
@@ -1162,7 +1348,7 @@ export default function HostView() {
                             </div>
                             <div className="p-3 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/30 space-y-3">
                                 <label className="font-semibold text-sm mb-1 block">Operation Mode</label>
-                                <select value={operationMode} onChange={(e) => setOperationMode(e.target.value)} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm">
+                                <select value={operationMode} onChange={(e) => setOperationMode(e.target.value)} disabled={drawing} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm disabled:opacity-50">
                                     <option value="standard">Standard Draw</option>
                                     <option value="team-divider">Team Divider</option>
                                     <option value="role-selector">Role Selector</option>
@@ -1170,15 +1356,15 @@ export default function HostView() {
                                 {operationMode === 'team-divider' && (
                                   <div>
                                     <label className="text-xs mt-1 block">Number of Teams</label>
-                                    <Input type="number" min="2" value={teamCount} onChange={(e) => setTeamCount(Math.max(2, parseInt(e.target.value, 10) || 2))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                    <Input type="number" min="2" value={teamCount} onChange={(e) => setTeamCount(Math.max(2, parseInt(e.target.value, 10) || 2))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
                                   </div>
                                 )}
                                 {operationMode === 'role-selector' && (
                                   <div className="space-y-2">
                                     <label className="text-xs mt-1 block">Roles (one per line: Role:Count)</label>
-                                    <textarea value={roleConfigText} onChange={(e) => setRoleConfigText(e.target.value)} rows={4} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm" />
+                                    <textarea value={roleConfigText} onChange={(e) => setRoleConfigText(e.target.value)} rows={4} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm disabled:opacity-50" disabled={drawing} />
                                     <label className="flex items-center gap-2 text-xs">
-                                      <input type="checkbox" checked={allowMultipleRoles} onChange={(e) => setAllowMultipleRoles(e.target.checked)} />
+                                      <input type="checkbox" checked={allowMultipleRoles} onChange={(e) => setAllowMultipleRoles(e.target.checked)} disabled={drawing} />
                                       Allow same participant to receive multiple roles
                                     </label>
                                   </div>
@@ -1186,15 +1372,15 @@ export default function HostView() {
                                 <div className="pt-2 border-t border-[var(--panel-border)] space-y-2">
                                   <p className="text-xs font-semibold">Fairness Controls</p>
                                   <label className="flex items-center gap-2 text-xs">
-                                    <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'remove'} onChange={() => setWinnerEligibilityMode('remove')} />
+                                    <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'remove'} onChange={() => setWinnerEligibilityMode('remove')} disabled={drawing} />
                                     Remove winner from future rounds
                                   </label>
                                   <label className="flex items-center gap-2 text-xs">
-                                    <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'keep'} onChange={() => setWinnerEligibilityMode('keep')} />
+                                    <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'keep'} onChange={() => setWinnerEligibilityMode('keep')} disabled={drawing} />
                                     Keep winner eligible
                                   </label>
                                   <label className="flex items-center gap-2 text-xs">
-                                    <input type="checkbox" checked={noRepeatAcrossPrizes} onChange={(e) => setNoRepeatAcrossPrizes(e.target.checked)} />
+                                    <input type="checkbox" checked={noRepeatAcrossPrizes} onChange={(e) => setNoRepeatAcrossPrizes(e.target.checked)} disabled={drawing} />
                                     No repeat across prizes/modes
                                   </label>
                                 </div>
@@ -1206,15 +1392,15 @@ export default function HostView() {
                                 <label className="font-semibold text-sm mb-1 block">Prize List</label>
                                 {prizes.map((prize, index) => (
                                     <div key={prize.id} className="flex items-center gap-2 mb-2">
-                                        <Input type="text" value={prize.name} onChange={e => {
+                                        <Input type="text" value={prize.name} disabled={drawing} onChange={e => {
                                             const newPrizes = [...prizes];
                                             newPrizes[index].name = e.target.value;
                                             setPrizes(newPrizes);
                                         }} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
-                                        <Button onClick={() => setPrizes(prizes.filter(p => p.id !== prize.id))} className="!bg-red-600 text-xs !p-2">X</Button>
+                                        <Button aria-label={`Remove ${prize.name || 'prize'}`} disabled={drawing} onClick={() => setPrizes(prizes.filter(p => p.id !== prize.id))} className="!bg-red-600 text-xs !p-2">X</Button>
                                     </div>
                                 ))}
-                                <Button onClick={() => setPrizes([...prizes, {id: Date.now(), name: `New Prize`}])} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Add Prize</Button>
+                                <Button onClick={() => setPrizes([...prizes, {id: Date.now(), name: `New Prize`}])} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Add Prize</Button>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -1227,6 +1413,7 @@ export default function HostView() {
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Custom Background</label>
+                                <p className="text-xs text-[var(--text-muted)]">Overrides the animated default background for Event Night.</p>
                                 <div className="flex items-center gap-2 mt-2">
                                     <Button onClick={() => bgImageInputRef.current && bgImageInputRef.current.click()} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Upload Image</Button>
                                     <Button onClick={() => setBackgroundImage('')} disabled={drawing || !backgroundImage} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Remove Image</Button>
@@ -1256,15 +1443,15 @@ export default function HostView() {
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Master Volume ({masterVolume} dB)</label>
-                                <input type="range" min="-40" max="6" step="1" value={masterVolume} onChange={e => setMasterVolume(e.target.value)} className="w-full" />
+                                <input type="range" min="-40" max="6" step="1" value={masterVolume} onChange={e => setMasterVolume(Number(e.target.value))} className="w-full" />
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Sound Effects Volume ({sfxVolume} dB)</label>
-                                <input type="range" min="-40" max="6" step="1" value={sfxVolume} onChange={e => setSfxVolume(e.target.value)} className="w-full" />
+                                <input type="range" min="-40" max="6" step="1" value={sfxVolume} onChange={e => setSfxVolume(Number(e.target.value))} className="w-full" />
                             </div>
                             <div>
-                                <label className="font-semibold text-sm mb-1 block">Music Volume ({musicVolume} dB)</label>
-                                <input type="range" min="-40" max="6" step="1" value={musicVolume} onChange={e => setMusicVolume(e.target.value)} className="w-full" />
+                                <label className="font-semibold text-sm mb-1 block">Celebration Volume ({musicVolume} dB)</label>
+                                <input type="range" min="-40" max="6" step="1" value={musicVolume} onChange={e => setMusicVolume(Number(e.target.value))} className="w-full" />
                             </div>
                             <div className="pt-4 border-t border-[var(--panel-border)]">
                                 <h3 className="text-lg font-bold text-[var(--text-color)] mb-2">Soundboard</h3>
@@ -1272,6 +1459,23 @@ export default function HostView() {
                                     <Button onClick={playDrumroll} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Drumroll</Button>
                                     <Button onClick={playCelebration} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Whistle + Applause + Wow</Button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+                    {settingsTab === 'public' && (
+                        <div className="space-y-5">
+                            <div>
+                                <h3 className="text-lg font-bold text-[var(--text-color)]">Audience Public View</h3>
+                                <p className="text-sm text-[var(--text-muted)] mt-1">Open this link in another tab or window in the same browser profile, then move that window to your projector or second display.</p>
+                                <p className="text-xs text-amber-400 mt-2">Because the app stores data locally, live results do not sync to a separate phone or computer without a shared backend.</p>
+                            </div>
+                            <div>
+                                <label htmlFor="public-view-url" className="font-semibold text-sm mb-1 block">Public view URL</label>
+                                <Input id="public-view-url" type="text" readOnly value={buildPublicViewUrl(window.location.href)} onFocus={(event) => event.target.select()} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)] text-xs" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Button onClick={handleCopyPublicViewUrl} className="w-full !bg-blue-600 hover:!bg-blue-700">Copy Link</Button>
+                                <a href={buildPublicViewUrl(window.location.href)} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg px-4 py-2 font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors">Open View</a>
                             </div>
                         </div>
                     )}
@@ -1301,12 +1505,13 @@ export default function HostView() {
                     )}
                 </div>
             </motion.div>
+            </>
         )}
               </AnimatePresence>
       
-      <div className="text-center z-10" style={{textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
-        <h1 className="font-bold" style={{color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, letterSpacing: `${titleLetterSpacing}px`, fontKerning: 'normal', fontFamily: titleFont, fontSize: `${titleFontSize}px`, textRendering: 'optimizeLegibility'}}>{title}</h1>
-        <p className="mt-2" style={{color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, letterSpacing: `${subtitleLetterSpacing}px`, fontKerning: 'normal', fontFamily: subtitleFont, fontSize: `${subtitleFontSize}px`, textRendering: 'optimizeLegibility'}}>{subtitle}</p>
+      <div className="text-center z-10 w-full pl-8 sm:pl-0" style={{textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
+        <h1 className="font-bold break-words" style={{color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, letterSpacing: `${titleLetterSpacing}px`, fontKerning: 'normal', fontFamily: titleFont, fontSize: `clamp(2rem, ${titleFontSize}px, 10vw)`, textRendering: 'optimizeLegibility'}}>{title}</h1>
+        <p className="mt-2 break-words" style={{color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, letterSpacing: `${subtitleLetterSpacing}px`, fontKerning: 'normal', fontFamily: subtitleFont, fontSize: `clamp(0.875rem, ${subtitleFontSize}px, 6vw)`, textRendering: 'optimizeLegibility'}}>{subtitle}</p>
       </div>
 
       <div className="flex flex-col items-center z-20">
@@ -1326,13 +1531,15 @@ export default function HostView() {
                 width: displayBoxComputedWidth,
                 minHeight: `${displayBoxHeight}px`,
                 height: 'auto',
+                maxHeight: 'min(45vh, 360px)',
+                overflowY: 'auto',
             }}
             animate={pulse ? {boxShadow: ['0 0 0px #fff', '0 0 40px #fff', '0 0 0px #fff']} : {}}
             transition={pulse ? {duration: 0.8, ease: 'easeInOut'} : {}}
             onAnimationComplete={() => setPulse(false)}
         >
             {operationMode === 'standard' && drawMode === 'numbers' ? (
-                <div className="flex items-center font-bold" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: `clamp(2.25rem, ${displayFontSize / 16}rem, 8.5rem)`, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, fontVariantNumeric: 'tabular-nums lining-nums'}}>
+                <div className="flex items-center font-bold max-w-full" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: displayNumberFontSize, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, fontVariantNumeric: 'tabular-nums lining-nums'}}>
                     {getDigits(displayValue).map((digit, index) => (
                         <div key={index} className="w-[1ch] text-center overflow-hidden">
                             <AnimatePresence mode="popLayout">
@@ -1357,7 +1564,7 @@ export default function HostView() {
 
       <div className="flex flex-col items-center gap-2 z-20">
         <div className="font-semibold">Prizes Drawn: {winnersHistory.length} / {prizes.length}</div>
-        <div className="text-sm" style={{color: 'var(--text-muted)'}}>{remainingEntries.length} / {initialEntries.length} Entries Remaining</div>
+        <div className="text-sm" style={{color: 'var(--text-muted)'}}>{eligibleEntryCount} / {initialEntries.length} Entries Eligible</div>
         <div className="relative w-full max-w-xs mt-2">
             <AnimatePresence>
             {isCharging && (
@@ -1383,7 +1590,7 @@ export default function HostView() {
                 onPointerCancel={operationMode === 'standard' ? stopCharging : undefined}
                 onContextMenu={(event) => event.preventDefault()}
                 onClick={operationMode === 'standard' ? undefined : drawNextWinner}
-                disabled={drawing || (operationMode === 'standard' && remainingEntries.length === 0) || (operationMode === 'standard' && winnersHistory.length >= prizes.length)} 
+                disabled={!canDraw}
                 className="w-full px-6 py-3 sm:px-10 sm:py-4 text-base sm:text-xl text-black" 
                 style={{backgroundColor: 'var(--button-action-bg)', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'}}
             >
@@ -1396,7 +1603,7 @@ export default function HostView() {
       {!historyPanelOpen && (
         <button
           onClick={() => setHistoryPanelOpen(true)}
-          className="fixed left-3 top-28 z-20 flex flex-col items-center justify-center gap-1 px-2 py-3 rounded-lg shadow-lg text-xs font-bold"
+          className="fixed left-0 sm:left-3 top-28 z-20 flex flex-col items-center justify-center gap-1 w-8 sm:w-auto px-1 sm:px-2 py-3 rounded-r-lg sm:rounded-lg shadow-lg text-xs font-bold"
           style={{ backgroundColor: 'var(--panel-bg)', color: 'var(--title-color)', border: '1px solid var(--panel-border)' }}
           title="Show History & Audit"
         >
@@ -1407,11 +1614,17 @@ export default function HostView() {
         </button>
       )}
 
-      <aside className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform duration-300 ${historyPanelOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}`}>
+      <aside
+        aria-hidden={!historyPanelOpen}
+        inert={!historyPanelOpen}
+        className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform duration-300 ${historyPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        style={{ transform: historyPanelOpen ? 'translateX(0)' : 'translateX(calc(-100% - 1rem))' }}
+      >
         <div className="flex items-center justify-between gap-2 mb-3">
           <h2 className="text-lg sm:text-2xl font-bold" style={{color: 'var(--title-color)'}}>History & Audit</h2>
           <button
             onClick={() => setHistoryPanelOpen(false)}
+            aria-label="Minimize history and audit panel"
             className="flex items-center justify-center w-7 h-7 rounded-md hover:opacity-80 transition-opacity"
             style={{ backgroundColor: 'var(--display-bg)', color: 'var(--text-muted)' }}
             title="Minimize"

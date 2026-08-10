@@ -8,11 +8,13 @@ export function downloadJson(filename, data) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadCsv(filename, rows) {
-  const csvContent = rows
+export function serializeCsv(rows) {
+  return rows
     .map(row =>
       row.map(cell => {
-        const str = String(cell == null ? '' : cell);
+        let str = String(cell == null ? '' : cell);
+        // Prevent spreadsheet apps from evaluating participant-controlled cells as formulas.
+        if (/^[\t\r ]*[=+\-@]/.test(str)) str = `'${str}`;
         if (str.includes(',') || str.includes('\n') || str.includes('"')) {
           return '"' + str.replace(/"/g, '""') + '"';
         }
@@ -20,7 +22,12 @@ export function downloadCsv(filename, rows) {
       }).join(',')
     )
     .join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+}
+
+export function downloadCsv(filename, rows) {
+  const csvContent = serializeCsv(rows);
+  // A UTF-8 BOM helps Excel recognize Myanmar and other non-Latin text correctly.
+  const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

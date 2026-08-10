@@ -1,70 +1,108 @@
-# Getting Started with Create React App
+# Lucky Draw Pro
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Lucky Draw Pro is a customizable React application for running live raffles, prize draws, random name selections, balanced team assignments, and role selections. It includes animated draw effects, sound controls, session persistence, audit history, export tools, and a synchronized public winners view.
+
+## Features
+
+- Number-ticket and participant-name draws
+- Multiple prizes and multiple winners per prize
+- Winner removal, reusable eligibility, and no-repeat controls
+- Balanced team divider and configurable role selector
+- Undo support and timestamped audit history
+- Text and CSV participant import with duplicate cleanup
+- JSON session save/load and automatic browser-session restoration
+- Winners, assignments, and audit-log exports in CSV, JSON, and PNG formats
+- Synchronized public winners view using `BroadcastChannel` with a storage fallback
+- Event themes, typography controls, logos, and custom background images
+- Animated LetterGlitch background for the default Event Night theme
+- Responsive layouts for desktop, tablets, phones, and public displays
+
+## Requirements
+
+- Node.js 18 or newer
+- npm
+- A modern browser with Canvas and local-storage support
+
+## Getting Started
+
+Install the locked dependencies:
+
+```bash
+npm ci
+```
+
+Start the development server:
+
+```bash
+npm start
+```
+
+Open [http://localhost:3000](http://localhost:3000) in a browser.
+
+## Using the App
+
+1. Open **Settings**.
+2. Select **Numbers** or **Names** and enter or import the participants.
+3. Configure the operation mode, prizes, winner count, and fairness options.
+4. Close Settings and hold **Hold to Draw**, or use the Space shortcut.
+5. Open **History & Audit** to undo results or export the session data.
+
+### Operation Modes
+
+- **Standard Draw** selects winners for each configured prize.
+- **Team Divider** shuffles participants into balanced teams.
+- **Role Selector** assigns participants to roles using `Role:Count` rules.
+
+### Keyboard Shortcuts
+
+- `Space` — run the next draw
+- `S` — open Settings
+- `F` — toggle fullscreen
+- `Escape` — close Settings
+
+### Public Winners View
+
+Open the app in a second tab and append this query parameter to the same page URL:
+
+```text
+?view=public
+```
+
+Keep the host and public pages in the same browser profile and on the same origin so results can synchronize automatically. A separate phone or computer will need a shared backend before it can receive live results.
 
 ## Available Scripts
 
-In the project directory, you can run:
-
 ### `npm start`
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
-
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Runs the application in development mode at `http://localhost:3000`.
 
 ### `npm test`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Runs the Jest test suite in watch mode. For a single CI-style run:
+
+```bash
+CI=true npm test -- --watchAll=false
+```
 
 ### `npm run build`
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Creates an optimized production build in the `build/` directory.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Project Structure
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```text
+src/
+├── components/    Host, public display, shared UI, and visual effects
+├── hooks/         Audio, persistence, shortcuts, and public synchronization
+├── utils/         Parsing, validation, draw modes, templates, and exports
+├── App.js         Host/public view routing
+└── index.js       React entry point
+```
 
-### `npm run eject`
+## Data and Privacy
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Lucky Draw Pro runs locally in the browser. Session autosaves, participant data, logos, and custom backgrounds are stored in browser local storage. Exported files are created on the user’s device; the app does not require a backend service.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Developer
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Developed by **Tao Mon Lae**.

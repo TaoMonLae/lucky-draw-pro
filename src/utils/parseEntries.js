@@ -96,6 +96,9 @@ const parseNumberRange = (inputValue) => {
   if (parts.length !== 2) return { error: 'Invalid range format. Please use "start-end".' };
 
   const [startStr, endStr] = parts;
+  if (!/^\d+$/.test(startStr) || !/^\d+$/.test(endStr)) {
+    return { error: 'Invalid range. Ticket numbers must use digits only.' };
+  }
   const startNum = parseInt(startStr, 10);
   const endNum = parseInt(endStr, 10);
 
@@ -104,7 +107,7 @@ const parseNumberRange = (inputValue) => {
   }
 
   const padding = startStr.length;
-  if (padding > 10) return { error: 'Ticket numbers cannot exceed 10 digits.' };
+  if (Math.max(startStr.length, endStr.length) > 10) return { error: 'Ticket numbers cannot exceed 10 digits.' };
   if (endNum - startNum + 1 > 40000) {
     return { error: 'Range is too large. Please use a range of 40,000 tickets or less.' };
   }
@@ -123,10 +126,27 @@ export function parseEntries(inputValue, drawMode) {
   }
 
   const rawEntries = parseMixedParticipants(inputValue);
-  return normalizeEntries(rawEntries, drawMode);
+  return normalizeAndValidateEntries(rawEntries, drawMode);
 }
 
 export function parseEntriesFromCsv(csvText, drawMode) {
   const rawEntries = parseCsvParticipants(csvText);
-  return normalizeEntries(rawEntries, drawMode);
+  return normalizeAndValidateEntries(rawEntries, drawMode);
+}
+
+function normalizeAndValidateEntries(rawEntries, drawMode) {
+  const result = normalizeEntries(rawEntries, drawMode);
+  if (drawMode !== 'numbers') return result;
+
+  const nonNumericEntry = result.entries.find((entry) => !/^\d+$/.test(entry));
+  if (nonNumericEntry) {
+    return { ...result, entries: [], error: `Invalid ticket number: "${nonNumericEntry}". Use digits only.` };
+  }
+
+  const oversizedEntry = result.entries.find((entry) => entry.length > 10);
+  if (oversizedEntry) {
+    return { ...result, entries: [], error: 'Ticket numbers cannot exceed 10 digits.' };
+  }
+
+  return result;
 }

@@ -8,7 +8,11 @@ export default function PublicView() {
     return <div className="flex items-center justify-center min-h-screen bg-gray-100 text-gray-800">Waiting for draw to start...</div>;
   }
 
-  const { title, logo, winnersHistory } = drawState;
+  const { title = 'Lucky Draw', logo, winnersHistory = [], operationMode = 'standard', lastAssignmentResult } = drawState;
+  const assignmentResult = lastAssignmentResult?.mode === operationMode ? lastAssignmentResult : null;
+  const isTeamView = assignmentResult?.mode === 'team-divider';
+  const isRoleView = assignmentResult?.mode === 'role-selector';
+  const headingSuffix = isTeamView ? 'Teams' : isRoleView ? 'Role Assignments' : 'Winners';
   const vintageStyle = {
     fontFamily: "'Playfair Display', serif",
     backgroundColor: '#fdf6e3',
@@ -16,17 +20,39 @@ export default function PublicView() {
   };
 
   return (
-    <div style={vintageStyle} className="min-h-screen p-8 text-[#3a2f2f]">
+    <div style={vintageStyle} className="min-h-screen p-4 sm:p-8 text-[#3a2f2f]">
       <div className="max-w-4xl mx-auto">
         {logo && <img src={logo} alt="Event Logo" className="h-24 w-auto mx-auto mb-6" />}
-        <h1 className="text-5xl font-bold text-center mb-8" style={{ fontFamily: "'Lobster', cursive" }}>{title} - Winners</h1>
-        {winnersHistory.length > 0 ? (
+        <h1 className="text-3xl sm:text-5xl font-bold text-center mb-6 sm:mb-8 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{title} - {headingSuffix}</h1>
+        {isTeamView ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {winnersHistory.map((group) => (
-              <div key={group.prize} className="bg-white bg-opacity-50 p-6 rounded-lg shadow-lg border border-gray-300">
-                <h3 className="text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4" style={{ fontFamily: "'Lobster', cursive" }}>{group.prize}</h3>
+            {assignmentResult.teams.map((team, index) => (
+              <div key={`${team.teamName}-${index}`} className="bg-white bg-opacity-50 p-4 sm:p-6 rounded-lg shadow-lg border border-gray-300 min-w-0">
+                <h3 className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{team.teamName}</h3>
                 <ul className="space-y-2">
-                  {group.tickets.map((ticket) => <li key={ticket} className="font-mono text-2xl bg-gray-100 px-3 py-1 rounded">{ticket}</li>)}
+                  {team.members.map((member, memberIndex) => <li key={`${member}-${memberIndex}`} className="text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{member}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : isRoleView ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {assignmentResult.assignments.map((assignment, index) => (
+              <div key={`${assignment.role}-${index}`} className="bg-white bg-opacity-50 p-4 sm:p-6 rounded-lg shadow-lg border border-gray-300 min-w-0">
+                <h3 className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{assignment.role}</h3>
+                <ul className="space-y-2">
+                  {assignment.participants.map((participant, participantIndex) => <li key={`${participant}-${participantIndex}`} className="text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{participant}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : winnersHistory.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {winnersHistory.map((group, groupIndex) => (
+              <div key={`${group.prize}-${groupIndex}`} className="bg-white bg-opacity-50 p-4 sm:p-6 rounded-lg shadow-lg border border-gray-300 min-w-0">
+                <h3 className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{group.prize}</h3>
+                <ul className="space-y-2">
+                  {group.tickets.map((ticket, ticketIndex) => <li key={`${ticket}-${ticketIndex}`} className="font-mono text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{ticket}</li>)}
                 </ul>
               </div>
             ))}

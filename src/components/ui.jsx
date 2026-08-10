@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 export const Button = ({ children, className, ...props }) => (
-  <button className={`text-white font-bold py-2 px-4 rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity shadow-lg transform active:scale-95 ${className}`} {...props}>
+  <button type="button" className={`text-white font-bold py-2 px-4 rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity shadow-lg transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent ${className || ''}`} {...props}>
     {children}
   </button>
 );

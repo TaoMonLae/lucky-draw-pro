@@ -1,4 +1,4 @@
-import { buildWinnersCsvRows, buildAuditLogCsvRows, downloadCsv } from './exportUtils';
+import { buildWinnersCsvRows, buildAuditLogCsvRows, downloadCsv, serializeCsv } from './exportUtils';
 
 describe('buildWinnersCsvRows', () => {
   test('returns header row for empty history', () => {
@@ -88,5 +88,15 @@ describe('downloadCsv (CSV escaping)', () => {
 
   test('does not throw for normal data', () => {
     expect(() => downloadCsv('test.csv', [['Name', 'Score'], ['Alice', 100]])).not.toThrow();
+  });
+
+  test('quotes commas and double quotes', () => {
+    expect(serializeCsv([['Smith, Alice', 'She said "yes"']]))
+      .toBe('"Smith, Alice","She said ""yes"""');
+  });
+
+  test('neutralizes spreadsheet formulas in user-controlled cells', () => {
+    expect(serializeCsv([['=HYPERLINK("https://example.test")', '+1', '-2', '@name']]))
+      .toBe('"\'=HYPERLINK(""https://example.test"")",\'+1,\'-2,\'@name');
   });
 });
