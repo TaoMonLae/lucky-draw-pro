@@ -16,7 +16,9 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
         const savedState = localStorage.getItem(storageKey);
         if (!savedState) return;
         const parsedState = JSON.parse(savedState);
-        if (isValidSessionData(parsedState)) setDrawState(parsedState);
+        if (isValidSessionData(parsedState)) {
+          setDrawState((currentState) => isValidPublicDrawState(currentState) ? currentState : parsedState);
+        }
       } catch (error) {
         console.error('Failed to parse public state', error);
       }
@@ -28,9 +30,14 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
       ? new BroadcastChannel(`${storageKey}-sync`)
       : null;
     const handleChannelMessage = (event) => {
-      if (isValidSessionData(event.data)) setDrawState(event.data);
+      if (isValidPublicDrawState(event.data)) {
+        setDrawState(event.data);
+      } else if (isValidSessionData(event.data)) {
+        setDrawState((currentState) => isValidPublicDrawState(currentState) ? currentState : event.data);
+      }
     };
     syncChannel?.addEventListener('message', handleChannelMessage);
+    syncChannel?.postMessage({ type: 'request-public-state' });
     const refreshInterval = setInterval(updateState, intervalMs);
     return () => {
       window.removeEventListener('storage', updateState);

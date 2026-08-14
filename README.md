@@ -1,6 +1,6 @@
 # Lucky Draw Pro
 
-Lucky Draw Pro is a customizable React application for running live raffles, prize draws, random name selections, balanced team assignments, and role selections. It includes animated draw effects, sound controls, session persistence, audit history, export tools, and a synchronized public winners view.
+Lucky Draw Pro is a customizable React application for running live raffles, prize draws, random name selections, balanced team assignments, and role selections. It includes animated draw effects, layered prize audio, session persistence, audit history, export tools, and a synchronized live audience view.
 
 ## Features
 
@@ -12,7 +12,8 @@ Lucky Draw Pro is a customizable React application for running live raffles, pri
 - Text and CSV participant import with duplicate cleanup
 - JSON session save/load and automatic browser-session restoration
 - Winners, assignments, and audit-log exports in CSV, JSON, and PNG formats
-- Cross-device public winners view using Supabase Realtime, with a same-browser fallback
+- Cross-device live audience view using Supabase Realtime, with a same-browser fallback
+- Tiered regular-prize fanfares and an expanded grand-prize finale with bundled Magnific effects
 - Event themes, typography controls, logos, and custom background images
 - Private Burmese display-font support with Unicode-safe Mon fallback and OpenType shaping
 - Animated LetterGlitch background for the default Event Night theme
@@ -62,7 +63,7 @@ Open [http://localhost:3000](http://localhost:3000) in a browser.
 - `F` — toggle fullscreen
 - `Escape` — close Settings
 
-### Public Winners View
+### Live Public View
 
 For another tab in the same browser profile, open **Settings → Public View** and use the fallback public link. It includes this query parameter:
 
@@ -70,7 +71,7 @@ For another tab in the same browser profile, open **Settings → Public View** a
 ?view=public
 ```
 
-For phones, tablets, projectors, and other computers, configure Supabase and select **Start Cross-Device Room**. Share the generated room link; winner and assignment updates will appear live. **Stop Sharing** closes the room and removes its public state.
+For phones, tablets, projectors, and other computers, configure Supabase and select **Start Cross-Device Room**. Share the generated room link; the current draw animation, prize name, event styling, progress, winner history, grand-prize finale, and team or role results will update live. **Stop Sharing** closes the room and removes its public state.
 
 ## Supabase Cross-Device Setup
 
@@ -133,7 +134,11 @@ supabase/
 
 ## Data and Privacy
 
-Session autosaves, full participant lists, audit logs, custom backgrounds, and exports stay in the host browser. When cross-device sharing is enabled, Supabase receives only the event title, subtitle, a size-limited logo, public winner history, and public team/role results. Room write credentials remain in the host browser, and rooms expire automatically after seven days.
+Session autosaves, full participant lists, audit logs, and exports stay in the host browser. When cross-device sharing is enabled, Supabase receives only public event styling, a size-limited logo and background, transient draw-display values and progress counts, public winner history, and public team/role results. Participant lists and audit logs are never published. Room write credentials remain in the host browser, and rooms expire automatically after seven days.
+
+## Audio Sources
+
+The bundled impact and audience effects come from Magnific's stock sound-effects catalog: [Stomp and Achieve](https://www.magnific.com/audio/sound-effects/stomp-and-achieve/68) and [Crowd cheering and applauding](https://www.magnific.com/audio/sound-effects/crowd-cheering-and-applauding/197). Synthesized effects remain as a fallback when an audio asset cannot load.
 
 ## Developer
 

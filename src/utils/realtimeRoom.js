@@ -2,6 +2,8 @@ import { isValidSessionData } from './validation';
 
 export const LIVE_ROOM_STORAGE_KEY = 'lucky-draw-live-room';
 export const MAX_PUBLIC_STATE_CHARS = 750_000;
+const PUBLIC_THEMES = ['Event Night', 'Corporate Blue', 'Carnival Red', 'Neon Party'];
+const PUBLIC_FINALE_PHASES = ['idle', 'build', 'reveal'];
 
 export function createRoomCredentials(cryptoApi = window.crypto) {
   const secureUuid = () => {
@@ -56,17 +58,45 @@ export function clearRoomCredentials(storage = window.localStorage) {
 }
 
 export function toPublicDrawState(appState) {
+  const safeNumber = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+  const backgroundImage = typeof appState.backgroundImage === 'string' && appState.backgroundImage.length <= 350_000
+    ? appState.backgroundImage
+    : '';
   const publicState = {
-    version: 1,
+    version: 2,
     title: typeof appState.title === 'string' ? appState.title.slice(0, 200) : 'Lucky Draw',
     subtitle: typeof appState.subtitle === 'string' ? appState.subtitle.slice(0, 300) : '',
+    theme: PUBLIC_THEMES.includes(appState.theme) ? appState.theme : 'Event Night',
+    backgroundImage,
     titleFont: typeof appState.titleFont === 'string' ? appState.titleFont.slice(0, 500) : undefined,
     subtitleFont: typeof appState.subtitleFont === 'string' ? appState.subtitleFont.slice(0, 500) : undefined,
     displayFont: typeof appState.displayFont === 'string' ? appState.displayFont.slice(0, 500) : undefined,
+    titleColor: typeof appState.titleColor === 'string' ? appState.titleColor.slice(0, 40) : '',
+    subtitleColor: typeof appState.subtitleColor === 'string' ? appState.subtitleColor.slice(0, 40) : '',
+    titleFontSize: safeNumber(appState.titleFontSize, 48),
+    subtitleFontSize: safeNumber(appState.subtitleFontSize, 16),
+    displayFontSize: safeNumber(appState.displayFontSize, 92),
+    displayLineHeight: safeNumber(appState.displayLineHeight, 1.02),
+    displayLetterSpacing: safeNumber(appState.displayLetterSpacing, 0.1),
+    drawMode: appState.drawMode === 'names' ? 'names' : 'numbers',
+    maxDigits: Math.max(1, Math.min(10, Math.round(safeNumber(appState.maxDigits, 2)))),
     logo: typeof appState.logo === 'string' && appState.logo.length <= 250_000 ? appState.logo : null,
     winnersHistory: Array.isArray(appState.winnersHistory) ? appState.winnersHistory : [],
     operationMode: appState.operationMode || 'standard',
     lastAssignmentResult: appState.lastAssignmentResult || null,
+    live: {
+      drawing: Boolean(appState.drawing),
+      currentPrize: typeof appState.currentPrize === 'string' ? appState.currentPrize.slice(0, 200) : '',
+      displayValue: typeof appState.publicDisplayValue === 'string' || typeof appState.publicDisplayValue === 'number'
+        ? String(appState.publicDisplayValue).slice(0, 500)
+        : '',
+      grandFinalePhase: PUBLIC_FINALE_PHASES.includes(appState.grandFinalePhase) ? appState.grandFinalePhase : 'idle',
+      showConfetti: Boolean(appState.showConfetti),
+      completedPrizeCount: Math.max(0, Math.round(safeNumber(appState.completedPrizeCount, 0))),
+      prizeCount: Math.max(0, Math.round(safeNumber(appState.prizeCount, 0))),
+      totalEntries: Math.max(0, Math.round(safeNumber(appState.totalEntries, 0))),
+      remainingEntriesCount: Math.max(0, Math.round(safeNumber(appState.remainingEntriesCount, 0))),
+    },
     updatedAt: new Date().toISOString(),
   };
 
@@ -78,10 +108,22 @@ export function toPublicDrawState(appState) {
 }
 
 export function isValidPublicDrawState(value) {
-  if (!value || typeof value !== 'object' || value.version !== 1) return false;
+  if (!value || typeof value !== 'object' || ![1, 2].includes(value.version)) return false;
   if (typeof value.title !== 'string' || typeof value.subtitle !== 'string') return false;
   if (value.logo !== null && value.logo !== undefined && typeof value.logo !== 'string') return false;
   if (typeof value.updatedAt !== 'string' || Number.isNaN(Date.parse(value.updatedAt))) return false;
+
+  if (value.version === 2) {
+    if (!PUBLIC_THEMES.includes(value.theme)) return false;
+    if (typeof value.backgroundImage !== 'string') return false;
+    if (!value.live || typeof value.live !== 'object') return false;
+    if (typeof value.live.drawing !== 'boolean' || typeof value.live.showConfetti !== 'boolean') return false;
+    if (typeof value.live.currentPrize !== 'string' || typeof value.live.displayValue !== 'string') return false;
+    if (!PUBLIC_FINALE_PHASES.includes(value.live.grandFinalePhase)) return false;
+    for (const field of ['completedPrizeCount', 'prizeCount', 'totalEntries', 'remainingEntriesCount']) {
+      if (!Number.isInteger(value.live[field]) || value.live[field] < 0) return false;
+    }
+  }
 
   return isValidSessionData({
     initialEntries: [],
@@ -91,5 +133,15 @@ export function isValidPublicDrawState(value) {
     titleFont: value.titleFont,
     subtitleFont: value.subtitleFont,
     displayFont: value.displayFont,
+    drawMode: value.drawMode,
+    maxDigits: value.maxDigits,
+    theme: value.theme,
+    titleColor: value.titleColor,
+    subtitleColor: value.subtitleColor,
+    titleFontSize: value.titleFontSize,
+    subtitleFontSize: value.subtitleFontSize,
+    displayFontSize: value.displayFontSize,
+    displayLineHeight: value.displayLineHeight,
+    displayLetterSpacing: value.displayLetterSpacing,
   });
 }

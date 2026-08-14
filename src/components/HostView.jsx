@@ -14,6 +14,7 @@ import { getPaddedDigits, isGrandPrizeDraw } from '../hooks/useDrawEngine';
 import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '../utils/drawModes';
 import { buildPublicViewUrl } from '../utils/publicViewUrl';
 import { useRealtimePublisher } from '../hooks/useRealtimePublisher';
+import { usePublicBroadcast } from '../hooks/usePublicBroadcast';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { clearRoomCredentials, createRoomCredentials, loadRoomCredentials, saveRoomCredentials } from '../utils/realtimeRoom';
 import { getTypographyProps } from '../utils/typography';
@@ -40,6 +41,10 @@ const DISPLAY_DEFAULTS = {
 const AUDIO_DEFAULTS = { masterVolume: 0, sfxVolume: -6, musicVolume: 0 };
 const MAX_EMBEDDED_IMAGE_CHARS = 4_000_000;
 const LETTER_GLITCH_COLORS = ['#123044', '#06b6d4', '#facc15'];
+const MAGNIFIC_AUDIO = {
+  crowdCheer: `${process.env.PUBLIC_URL || ''}/audio/magnific-crowd-cheer.mp3`,
+  stompAchieve: `${process.env.PUBLIC_URL || ''}/audio/magnific-stomp-achieve.mp3`,
+};
 const LIVE_SYNC_LABELS = {
   unconfigured: 'Setup required',
   idle: 'Not connected',
@@ -62,6 +67,7 @@ export default function HostView() {
   const [remainingEntries, setRemainingEntries] = useState(Array.from({ length: 50 }, (_, i) => String(i + 1).padStart(2, '0')));
   const [inputValue, setInputValue] = useState("1-50");
   const [displayValue, setDisplayValue] = useState("01");
+  const [publicDisplayValue, setPublicDisplayValue] = useState("01");
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [prizes, setPrizes] = useState([
@@ -141,18 +147,22 @@ export default function HostView() {
   const drawActionRef = useRef(() => {});
   const drawLockRef = useRef(false);
   const audioStarted = useRef(false);
+  const displayValueRef = useRef(displayValue);
   const almostTriggered = useRef(false);
   const sfxVolumeNode = useRef(null);
   const musicVolumeNode = useRef(null);
   const tickSynth = useRef(null);
   const drumrollSynth = useRef(null);
   const applauseSynth = useRef(null);
-  const whistleSynth = useRef(null);
-  const wowSynth = useRef(null);
   const grandRiserSynth = useRef(null);
   const grandImpactSynth = useRef(null);
   const grandFanfareSynth = useRef(null);
   const grandSparkleSynth = useRef(null);
+  const regularRiserSynth = useRef(null);
+  const regularFanfareSynth = useRef(null);
+  const regularChimeSynth = useRef(null);
+  const magnificStompPlayer = useRef(null);
+  const magnificCrowdPlayer = useRef(null);
 
   const appState = useMemo(() => ({
     initialEntries, remainingEntries, winnersHistory,
@@ -176,6 +186,31 @@ export default function HostView() {
     displayFontSize, displayLineHeight, displayLetterSpacing, displayBoxWidth,
     displayBoxHeight, operationMode, teamCount, roleConfigText, allowMultipleRoles,
     winnerEligibilityMode, noRepeatAcrossPrizes, auditLog, lastAssignmentResult
+  ]);
+
+  const publicRemainingEntriesCount = useMemo(() => {
+    if (!noRepeatAcrossPrizes) return remainingEntries.length;
+    const blockedEntries = getNoRepeatSet(auditLog);
+    return remainingEntries.filter((entry) => !blockedEntries.has(entry)).length;
+  }, [auditLog, noRepeatAcrossPrizes, remainingEntries]);
+
+  const publicLiveState = useMemo(() => ({
+    ...appState,
+    drawing,
+    currentPrize: drawing || showConfetti || grandFinalePhase !== 'idle'
+      ? currentPrize
+      : prizes[winnersHistory.length]?.name || currentPrize,
+    publicDisplayValue,
+    grandFinalePhase,
+    showConfetti,
+    completedPrizeCount: winnersHistory.length,
+    prizeCount: prizes.length,
+    totalEntries: initialEntries.length,
+    remainingEntriesCount: publicRemainingEntriesCount,
+  }), [
+    appState, drawing, currentPrize, publicDisplayValue, grandFinalePhase,
+    showConfetti, winnersHistory.length, prizes, initialEntries.length,
+    publicRemainingEntriesCount,
   ]);
 
   // --- SESSION MANAGEMENT ---
@@ -257,11 +292,12 @@ export default function HostView() {
   }, []);
 
   useSessionStorage('lucky-draw-autosave', appState, autosaveReady);
+  usePublicBroadcast('lucky-draw-autosave', publicLiveState, autosaveReady);
 
   const liveSync = useRealtimePublisher({
     roomId: liveRoom?.roomId || '',
     writeKey: liveRoom?.writeKey || '',
-    appState,
+    appState: publicLiveState,
     enabled: autosaveReady && Boolean(liveRoom) && !roomActionPending,
   });
   const publicViewUrl = buildPublicViewUrl(window.location.href, liveRoom?.roomId || '');
@@ -276,22 +312,30 @@ export default function HostView() {
     musicVolumeNode.current = new Tone.Volume(0).toDestination();
 
     tickSynth.current = new Tone.MembraneSynth().connect(sfxVolumeNode.current);
-    drumrollSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(sfxVolumeNode.current);
+    drumrollSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.015, octaves: 3, envelope: { attack: 0.001, decay: 0.16, sustain: 0 } }).connect(sfxVolumeNode.current);
     applauseSynth.current = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0 }}).connect(musicVolumeNode.current);
-    whistleSynth.current = new Tone.Synth({ oscillator: { type: 'triangle8' }, envelope: { attack: 0.01, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(musicVolumeNode.current);
-    wowSynth.current = new Tone.FMSynth({ harmonicity: 2, modulationIndex: 8, envelope: { attack: 0.03, decay: 0.2, sustain: 0.08, release: 0.4 } }).connect(musicVolumeNode.current);
+    regularRiserSynth.current = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 1.5, decay: 1, sustain: 0.03, release: 0.25 } }).connect(sfxVolumeNode.current);
+    regularFanfareSynth.current = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle8' }, envelope: { attack: 0.015, decay: 0.28, sustain: 0.12, release: 0.7 } }).connect(musicVolumeNode.current);
+    regularChimeSynth.current = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.004, decay: 0.18, sustain: 0.01, release: 0.5 } }).connect(musicVolumeNode.current);
     grandRiserSynth.current = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 3.5, decay: 4.5, sustain: 0.08, release: 0.6 } }).connect(sfxVolumeNode.current);
     grandImpactSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.12, octaves: 8, envelope: { attack: 0.001, decay: 1.8, sustain: 0, release: 0.2 } }).connect(sfxVolumeNode.current);
     grandFanfareSynth.current = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle8' }, envelope: { attack: 0.02, decay: 0.35, sustain: 0.22, release: 1.1 } }).connect(musicVolumeNode.current);
     grandSparkleSynth.current = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.005, decay: 0.12, sustain: 0.02, release: 0.55 } }).connect(musicVolumeNode.current);
+    magnificStompPlayer.current = new Tone.Player({ url: MAGNIFIC_AUDIO.stompAchieve, fadeIn: 0.01, fadeOut: 0.18 }).connect(sfxVolumeNode.current);
+    magnificCrowdPlayer.current = new Tone.Player({ url: MAGNIFIC_AUDIO.crowdCheer, fadeIn: 0.04, fadeOut: 0.35 }).connect(musicVolumeNode.current);
 
+    regularRiserSynth.current.volume.value = -20;
+    regularFanfareSynth.current.volume.value = -11;
+    regularChimeSynth.current.volume.value = -10;
     grandRiserSynth.current.volume.value = -15;
     grandImpactSynth.current.volume.value = -3;
     grandFanfareSynth.current.volume.value = -8;
     grandSparkleSynth.current.volume.value = -10;
+    magnificStompPlayer.current.volume.value = -5;
+    magnificCrowdPlayer.current.volume.value = -8;
 
     return () => {
-      [tickSynth, drumrollSynth, applauseSynth, whistleSynth, wowSynth, grandRiserSynth, grandImpactSynth, grandFanfareSynth, grandSparkleSynth].forEach((ref) => {
+      [tickSynth, drumrollSynth, applauseSynth, regularRiserSynth, regularFanfareSynth, regularChimeSynth, grandRiserSynth, grandImpactSynth, grandFanfareSynth, grandSparkleSynth, magnificStompPlayer, magnificCrowdPlayer].forEach((ref) => {
         ref.current?.dispose();
         ref.current = null;
       });
@@ -318,6 +362,20 @@ export default function HostView() {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    displayValueRef.current = String(displayValue ?? '');
+    if (!drawing) setPublicDisplayValue(displayValueRef.current);
+  }, [displayValue, drawing]);
+
+  useEffect(() => {
+    if (!drawing) return undefined;
+    setPublicDisplayValue(displayValueRef.current);
+    const publicDisplayTimer = setInterval(() => {
+      setPublicDisplayValue(displayValueRef.current);
+    }, 300);
+    return () => clearInterval(publicDisplayTimer);
+  }, [drawing]);
 
   useEffect(() => {
     if (!showSettings || !settingsDialogRef.current) return undefined;
@@ -384,11 +442,13 @@ export default function HostView() {
   };
 
   const resetDraw = (entriesToUse = initialEntries, newMaxDigits = maxDigits) => {
+    stopCelebrationAudio();
     setRemainingEntries(entriesToUse);
     setWinnersHistory([]);
     const firstEntry = entriesToUse[0] || (drawMode === 'numbers' ? '1' : 'Winner');
     setAuditLog([]);
     setDisplayValue(firstEntry);
+    setCurrentPrize('');
     setError('');
     setShowConfetti(false);
     setGrandFinalePhase('idle');
@@ -398,6 +458,7 @@ export default function HostView() {
   
   const handleUndo = () => {
     if (auditLog.length === 0 || drawing) return;
+    stopCelebrationAudio();
     const lastEntry = auditLog[auditLog.length - 1];
     setAuditLog(auditLog.slice(0, -1));
 
@@ -741,14 +802,41 @@ export default function HostView() {
     e.target.value = null;
   };
   
-  const playDrumroll = () => {
+  const playMagnificPlayer = (playerRef, now, duration) => {
+    const player = playerRef.current;
+    if (!player?.loaded) return false;
+    try {
+      if (player.state === 'started') player.stop(now);
+      player.start(now + 0.015, 0, duration);
+      return true;
+    } catch (error) {
+      console.warn('Magnific audio layer could not play', error);
+      return false;
+    }
+  };
+
+  const stopCelebrationAudio = () => {
+    const now = Tone.now();
+    [magnificStompPlayer, magnificCrowdPlayer].forEach((playerRef) => {
+      try {
+        if (playerRef.current?.state === 'started') playerRef.current.stop(now);
+      } catch (error) {
+        console.warn('Celebration audio could not be stopped cleanly', error);
+      }
+    });
+  };
+
+  const playDrumroll = (prizeIndex = 0, prizeCount = 1) => {
+    const now = Tone.now();
+    const progress = prizeCount > 1 ? prizeIndex / (prizeCount - 1) : 0;
+    regularRiserSynth.current?.triggerAttackRelease(2.5, now);
     if (drumrollSynth.current) {
-        const now = Tone.now();
-        drumrollSynth.current.triggerAttack("C2", now);
-        drumrollSynth.current.triggerAttack("C2", now + 0.05);
-        drumrollSynth.current.triggerAttack("G1", now + 0.1);
-        drumrollSynth.current.triggerAttack("C2", now + 0.15);
-        drumrollSynth.current.triggerAttack("G1", now + 0.2);
+      const hits = [0, 0.42, 0.78, 1.08, 1.34, 1.56, 1.74, 1.89, 2.02, 2.13];
+      hits.forEach((offset, index) => {
+        const pitch = index % 4 === 0 ? 'C2' : index % 2 === 0 ? 'G1' : 'C2';
+        const velocity = Math.min(1, 0.42 + progress * 0.14 + index * 0.055);
+        drumrollSynth.current.triggerAttackRelease(pitch, '32n', now + offset, velocity);
+      });
     }
   };
 
@@ -760,17 +848,24 @@ export default function HostView() {
     }
   };
 
-  const playCelebration = () => {
+  const playCelebration = (prizeIndex = 0, prizeCount = 1) => {
     const now = Tone.now();
-    if (whistleSynth.current) {
-      whistleSynth.current.triggerAttackRelease('A5', '16n', now);
-      whistleSynth.current.triggerAttackRelease('C6', '8n', now + 0.12);
-    }
-    if (wowSynth.current) {
-      wowSynth.current.triggerAttackRelease('F3', '8n', now + 0.25);
-      wowSynth.current.triggerAttackRelease('A3', '8n', now + 0.35);
-    }
-    playApplause();
+    const progress = prizeCount > 1 ? prizeIndex / (prizeCount - 1) : 0;
+    const tier = Math.min(2, Math.floor(progress * 3));
+    const fanfares = [
+      { chord: ['C4', 'E4', 'G4'], sparkle: ['G5', 'C6', 'E6'] },
+      { chord: ['D4', 'F#4', 'A4'], sparkle: ['A5', 'D6', 'F#6', 'A6'] },
+      { chord: ['E4', 'G#4', 'B4'], sparkle: ['B5', 'E6', 'G#6', 'B6', 'E7'] },
+    ];
+    const cue = fanfares[tier];
+    const hasStomp = playMagnificPlayer(magnificStompPlayer, now, 2.7);
+    const hasCrowd = playMagnificPlayer(magnificCrowdPlayer, now + 0.12, 3.2 + tier * 0.5);
+
+    regularFanfareSynth.current?.triggerAttackRelease(cue.chord, '2n', now + (hasStomp ? 0.1 : 0));
+    cue.sparkle.forEach((note, index) => {
+      regularChimeSynth.current?.triggerAttackRelease(note, '16n', now + 0.18 + index * 0.15);
+    });
+    if (!hasCrowd) playApplause();
   };
 
   const playGrandFinaleBuild = () => {
@@ -785,6 +880,8 @@ export default function HostView() {
 
   const playGrandFinaleReveal = () => {
     const now = Tone.now();
+    playMagnificPlayer(magnificStompPlayer, now, 3.4);
+    const hasCrowd = playMagnificPlayer(magnificCrowdPlayer, now + 0.1, 7);
     grandImpactSynth.current?.triggerAttackRelease('C1', '1n', now);
     grandFanfareSynth.current?.triggerAttackRelease(['C4', 'E4', 'G4'], '2n', now + 0.08);
     grandFanfareSynth.current?.triggerAttackRelease(['F4', 'A4', 'C5'], '2n', now + 0.62);
@@ -793,7 +890,7 @@ export default function HostView() {
     ['C6', 'E6', 'G6', 'C7', 'G6', 'E6', 'C7'].forEach((note, index) => {
       grandSparkleSynth.current?.triggerAttackRelease(note, '16n', now + 0.24 + index * 0.18);
     });
-    playApplause();
+    if (!hasCrowd) playApplause();
   };
 
   const ensureAudioStarted = async () => {
@@ -1053,6 +1150,8 @@ export default function HostView() {
 
     setDrawing(true);
     setError('');
+    clearTimeout(finaleTimeoutRef.current);
+    stopCelebrationAudio();
     setShowConfetti(false);
     setPulse(true);
     almostTriggered.current = false;
@@ -1066,7 +1165,7 @@ export default function HostView() {
       playGrandFinaleBuild();
     } else {
       setGrandFinalePhase('idle');
-      playDrumroll();
+      playDrumroll(winnersHistory.length, prizes.length);
     }
 
     const drawnTickets = [];
@@ -1101,7 +1200,7 @@ export default function HostView() {
         setGrandFinalePhase('idle');
       }, 9000);
     } else {
-      playCelebration();
+      playCelebration(winnersHistory.length, prizes.length);
       finaleTimeoutRef.current = setTimeout(() => setShowConfetti(false), 5000);
     }
     } catch (err) {
@@ -1123,7 +1222,7 @@ export default function HostView() {
         return;
       }
       if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
-      if (event.code === 'Space') {
+      if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') {
         event.preventDefault();
         drawActionRef.current();
       }
