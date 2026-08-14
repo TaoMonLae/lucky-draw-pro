@@ -4,8 +4,8 @@ node_modules/
 # Production build artifacts (optional — remove if you want to commit build/)
 # build/
 
-# Licensed fonts: keep binaries local/private and out of Git history
-public/private-fonts/
+# Generated copies are ignored; source fonts in public/private-fonts are
+# intentionally versioned so Git-based deployments can serve them.
 build/private-fonts/
 
 # Environment variables

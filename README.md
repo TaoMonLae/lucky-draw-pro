@@ -91,13 +91,13 @@ Use a Supabase publishable key in the browser. Never put a secret key or `servic
 
 ## Private Burmese Fonts
 
-Licensed font binaries belong in `public/private-fonts/`. That directory and its generated `build/private-fonts/` copy are excluded by `.gitignore`, so `git add` and normal public-repository pushes do not publish the paid files. The committed `public/privateFonts.css` file contains only family names and local paths.
+Licensed font binaries live in `public/private-fonts/` and are versioned so Git-based Vercel deployments can serve them. Generated copies in `build/private-fonts/` remain ignored to avoid storing each binary twice.
 
 The application enables OpenType kerning, common/contextual ligatures, glyph composition, localized forms, and mark positioning. Letter spacing is automatically reset to zero for Unicode Myanmar text because tracking can damage complex-script clusters.
 
 Most of the supplied private faces cover core Burmese but do not include the dedicated Mon characters U+105A–U+1060. When those characters are detected, the complete text run automatically switches to Noto Sans Myanmar and receives `lang="mnw"`, preventing a Mon syllable from being split across incompatible fonts.
 
-Important: excluding binaries from Git does not itself grant web-distribution rights. Confirm that the font license permits web embedding before including `public/private-fonts/` in a hosted deployment. A Git-based deployment cannot receive these ignored files unless they are delivered separately through an authorized private deployment process.
+Important: these web-font files are publicly downloadable from the repository and deployed application. Keep them versioned only while the font license permits public web embedding and redistribution.
 
 ## Available Scripts
 
