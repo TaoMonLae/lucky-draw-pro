@@ -639,7 +639,7 @@ export default function HostView() {
 
   const filteredEntries = initialEntries.filter((entry) =>
     entry.toLocaleLowerCase().includes(participantSearch.toLocaleLowerCase().trim())
-  );
+  ).slice(0, 100);
 
   const updateEntryAt = (indexToUpdate, value) => {
     const nextValue = value.trim();
@@ -799,7 +799,8 @@ export default function HostView() {
   };
 
   const getEligibleEntries = (pool) => {
-    const blocked = noRepeatAcrossPrizes ? getNoRepeatSet(auditLog) : new Set();
+    if (!noRepeatAcrossPrizes) return pool;
+    const blocked = getNoRepeatSet(auditLog);
     return pool.filter((entry) => !blocked.has(entry));
   };
 
@@ -1216,7 +1217,7 @@ export default function HostView() {
        )}
 
       <Button ref={settingsButtonRef} aria-label="Open settings" onClick={() => setShowSettings(true)} className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 !bg-gray-700 hover:!bg-gray-600 !p-2 sm:!p-3">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.73l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.73l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.73l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.73l.15-.08a2 2 0 0 0-.73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </Button>
 
       <div className="fixed bottom-2 right-2 sm:absolute sm:top-4 sm:left-1/2 sm:bottom-auto sm:right-auto sm:-translate-x-1/2 z-30 w-[min(78vw,320px)] sm:w-[min(900px,95vw)] rounded-xl sm:rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-3 shadow-xl">
@@ -1713,7 +1714,6 @@ export default function HostView() {
         </div>
       </div>
       
-      {/* Floating button to re-open history panel when minimized */}
       {!historyPanelOpen && (
         <button
           onClick={() => setHistoryPanelOpen(true)}
@@ -1805,7 +1805,6 @@ export default function HostView() {
         </div>
       </aside>
 
-      {/* Hidden components for PNG export — positioned far off-screen so layout renders at full size */}
       <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', pointerEvents: 'none' }}>
          <div ref={exportRef}>
             {winnerToExport && (
