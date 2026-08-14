@@ -6,7 +6,7 @@ import { themes, fonts } from '../utils/themeConfig';
 import { Button, Input, ConfettiParticle } from './ui';
 import { useSessionStorage } from '../hooks/useSessionStorage';
 import { useAudioEngine } from '../hooks/useAudioEngine';
-import { parseEntries, parseEntriesFromCsv } from '../utils/parseEntries';
+import { MAX_ENTRIES, parseEntries, parseEntriesFromCsv } from '../utils/parseEntries';
 import { downloadJson, downloadCsv, buildWinnersCsvRows, buildAuditLogCsvRows, buildAssignmentCsvRows } from '../utils/exportUtils';
 import { isValidSessionData, parseSessionJson } from '../utils/validation';
 import { sessionTemplates } from '../utils/sessionTemplates';
@@ -362,7 +362,7 @@ export default function HostView() {
     const { entries = [], error: parseError, duplicateGroups: duplicates = [], blankCount = 0 } = parseEntries(inputValue, drawMode);
     if (parseError) { setError(parseError); return; }
     if (entries.length < 1) { setError('Please provide at least one valid entry.'); return; }
-    if (entries.length > 40000) { setError('Too many entries. Please provide 40,000 or less.'); return; }
+    if (entries.length > MAX_ENTRIES) { setError(`Too many entries. Please provide ${MAX_ENTRIES.toLocaleString()} or less.`); return; }
     processEntries(entries, { duplicateGroups: duplicates, blankCount });
   };
 
@@ -595,8 +595,8 @@ export default function HostView() {
             return;
         }
 
-        if (parsed.entries.length > 40000) {
-            setError('Too many entries. Please provide 40,000 or less.');
+        if (parsed.entries.length > MAX_ENTRIES) {
+            setError(`Too many entries. Please provide ${MAX_ENTRIES.toLocaleString()} or less.`);
             return;
         }
 
@@ -624,8 +624,8 @@ export default function HostView() {
         return;
       }
 
-      if (parsed.entries.length > 40000) {
-        setError('Too many entries. Please provide 40,000 or less.');
+      if (parsed.entries.length > MAX_ENTRIES) {
+        setError(`Too many entries. Please provide ${MAX_ENTRIES.toLocaleString()} or less.`);
         return;
       }
 
@@ -647,6 +647,10 @@ export default function HostView() {
 
     const nextEntries = initialEntries.map((entry, idx) => (idx === indexToUpdate ? nextValue : entry));
     const normalized = parseEntries(nextEntries.join(', '), drawMode);
+    if (normalized.error) {
+      setError(normalized.error);
+      return;
+    }
     setInputValue(nextEntries.join(', '));
     processEntries(normalized.entries, { duplicateGroups: normalized.duplicateGroups, blankCount: normalized.blankCount });
   };

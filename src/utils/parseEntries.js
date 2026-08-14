@@ -1,4 +1,5 @@
 const CSV_SPLIT_REGEX = /[\n,]+/;
+export const MAX_ENTRIES = 70000;
 
 const collapseWhitespace = (value) => value.replace(/\s+/g, ' ').trim();
 
@@ -108,8 +109,8 @@ const parseNumberRange = (inputValue) => {
 
   const padding = startStr.length;
   if (Math.max(startStr.length, endStr.length) > 10) return { error: 'Ticket numbers cannot exceed 10 digits.' };
-  if (endNum - startNum + 1 > 40000) {
-    return { error: 'Range is too large. Please use a range of 40,000 tickets or less.' };
+  if (endNum - startNum + 1 > MAX_ENTRIES) {
+    return { error: `Range is too large. Please use a range of ${MAX_ENTRIES.toLocaleString()} tickets or less.` };
   }
 
   return {
@@ -136,6 +137,13 @@ export function parseEntriesFromCsv(csvText, drawMode) {
 
 function normalizeAndValidateEntries(rawEntries, drawMode) {
   const result = normalizeEntries(rawEntries, drawMode);
+  if (result.entries.length > MAX_ENTRIES) {
+    return {
+      ...result,
+      entries: [],
+      error: `Too many entries. Please provide ${MAX_ENTRIES.toLocaleString()} or less.`,
+    };
+  }
   if (drawMode !== 'numbers') return result;
 
   const nonNumericEntry = result.entries.find((entry) => !/^\d+$/.test(entry));
