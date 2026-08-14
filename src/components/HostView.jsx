@@ -10,7 +10,7 @@ import { MAX_ENTRIES, parseEntries, parseEntriesFromCsv } from '../utils/parseEn
 import { downloadJson, downloadCsv, buildWinnersCsvRows, buildAuditLogCsvRows, buildAssignmentCsvRows } from '../utils/exportUtils';
 import { isValidSessionData, parseSessionJson } from '../utils/validation';
 import { sessionTemplates } from '../utils/sessionTemplates';
-import { getPaddedDigits } from '../hooks/useDrawEngine';
+import { getPaddedDigits, isGrandPrizeDraw } from '../hooks/useDrawEngine';
 import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '../utils/drawModes';
 import { buildPublicViewUrl } from '../utils/publicViewUrl';
 import { useRealtimePublisher } from '../hooks/useRealtimePublisher';
@@ -18,6 +18,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { clearRoomCredentials, createRoomCredentials, loadRoomCredentials, saveRoomCredentials } from '../utils/realtimeRoom';
 import { getTypographyProps } from '../utils/typography';
 import LetterGlitch from './LetterGlitch';
+import GrandFinale from './GrandFinale';
 
 const DISPLAY_DEFAULTS = {
   titleFont: 'sans-serif',
@@ -119,9 +120,11 @@ export default function HostView() {
   const [autosaveReady, setAutosaveReady] = useState(false);
   const [liveRoom, setLiveRoom] = useState(() => loadRoomCredentials());
   const [roomActionPending, setRoomActionPending] = useState(false);
+  const [grandFinalePhase, setGrandFinalePhase] = useState('idle');
 
   // Refs
-  const timeoutRef = useRef(null);
+  const animationTimersRef = useRef(new Set());
+  const finaleTimeoutRef = useRef(null);
   const chargeIntervalRef = useRef(null);
   const chargeLockRef = useRef(false);
   const displayRef = useRef(null);
@@ -146,6 +149,10 @@ export default function HostView() {
   const applauseSynth = useRef(null);
   const whistleSynth = useRef(null);
   const wowSynth = useRef(null);
+  const grandRiserSynth = useRef(null);
+  const grandImpactSynth = useRef(null);
+  const grandFanfareSynth = useRef(null);
+  const grandSparkleSynth = useRef(null);
 
   const appState = useMemo(() => ({
     initialEntries, remainingEntries, winnersHistory,
@@ -273,9 +280,18 @@ export default function HostView() {
     applauseSynth.current = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0 }}).connect(musicVolumeNode.current);
     whistleSynth.current = new Tone.Synth({ oscillator: { type: 'triangle8' }, envelope: { attack: 0.01, decay: 0.15, sustain: 0.05, release: 0.2 } }).connect(musicVolumeNode.current);
     wowSynth.current = new Tone.FMSynth({ harmonicity: 2, modulationIndex: 8, envelope: { attack: 0.03, decay: 0.2, sustain: 0.08, release: 0.4 } }).connect(musicVolumeNode.current);
+    grandRiserSynth.current = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 3.5, decay: 4.5, sustain: 0.08, release: 0.6 } }).connect(sfxVolumeNode.current);
+    grandImpactSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.12, octaves: 8, envelope: { attack: 0.001, decay: 1.8, sustain: 0, release: 0.2 } }).connect(sfxVolumeNode.current);
+    grandFanfareSynth.current = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'triangle8' }, envelope: { attack: 0.02, decay: 0.35, sustain: 0.22, release: 1.1 } }).connect(musicVolumeNode.current);
+    grandSparkleSynth.current = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.005, decay: 0.12, sustain: 0.02, release: 0.55 } }).connect(musicVolumeNode.current);
+
+    grandRiserSynth.current.volume.value = -15;
+    grandImpactSynth.current.volume.value = -3;
+    grandFanfareSynth.current.volume.value = -8;
+    grandSparkleSynth.current.volume.value = -10;
 
     return () => {
-      [tickSynth, drumrollSynth, applauseSynth, whistleSynth, wowSynth].forEach((ref) => {
+      [tickSynth, drumrollSynth, applauseSynth, whistleSynth, wowSynth, grandRiserSynth, grandImpactSynth, grandFanfareSynth, grandSparkleSynth].forEach((ref) => {
         ref.current?.dispose();
         ref.current = null;
       });
@@ -375,6 +391,8 @@ export default function HostView() {
     setDisplayValue(firstEntry);
     setError('');
     setShowConfetti(false);
+    setGrandFinalePhase('idle');
+    clearTimeout(finaleTimeoutRef.current);
     setLastAssignmentResult(null);
   };
   
@@ -396,6 +414,9 @@ export default function HostView() {
     }
 
     setError('');
+    setShowConfetti(false);
+    setGrandFinalePhase('idle');
+    clearTimeout(finaleTimeoutRef.current);
   };
 
   const handleSaveSession = () => {
@@ -752,6 +773,29 @@ export default function HostView() {
     playApplause();
   };
 
+  const playGrandFinaleBuild = () => {
+    const now = Tone.now();
+    grandRiserSynth.current?.triggerAttackRelease(8, now);
+    if (drumrollSynth.current) {
+      [0, 0.55, 1.05, 1.5, 1.9, 2.25, 2.55, 2.8].forEach((offset, index) => {
+        drumrollSynth.current.triggerAttackRelease(index % 3 === 0 ? 'C2' : 'G1', '16n', now + offset);
+      });
+    }
+  };
+
+  const playGrandFinaleReveal = () => {
+    const now = Tone.now();
+    grandImpactSynth.current?.triggerAttackRelease('C1', '1n', now);
+    grandFanfareSynth.current?.triggerAttackRelease(['C4', 'E4', 'G4'], '2n', now + 0.08);
+    grandFanfareSynth.current?.triggerAttackRelease(['F4', 'A4', 'C5'], '2n', now + 0.62);
+    grandFanfareSynth.current?.triggerAttackRelease(['G4', 'B4', 'D5'], '2n', now + 1.16);
+    grandFanfareSynth.current?.triggerAttackRelease(['C4', 'E4', 'G4', 'C5'], '1n', now + 1.72);
+    ['C6', 'E6', 'G6', 'C7', 'G6', 'E6', 'C7'].forEach((note, index) => {
+      grandSparkleSynth.current?.triggerAttackRelease(note, '16n', now + 0.24 + index * 0.18);
+    });
+    playApplause();
+  };
+
   const ensureAudioStarted = async () => {
     if (scriptsLoaded.tone && !audioStarted.current) {
       await Tone.start();
@@ -807,27 +851,41 @@ export default function HostView() {
 
   const runSingleWinnerAnimation = (winnerEntry, isFinalWinnerOfBatch) => {
     return new Promise((resolve) => {
-        const isFinalPrize = winnersHistory.length + 1 === prizes.length;
+        const isFinalPrize = isGrandPrizeDraw(winnersHistory.length, prizes.length);
         const isGrandFinal = isFinalPrize && isFinalWinnerOfBatch;
-        const slowMoDuration = isGrandFinal ? 14000 : 4000;
+        const slowMoDuration = isGrandFinal ? 9000 : 4000;
         let finished = false;
+        const timers = animationTimersRef.current;
+
+        timers.forEach((timerId) => clearTimeout(timerId));
+        timers.clear();
+
+        const schedule = (callback, delay) => {
+            const timerId = setTimeout(() => {
+                timers.delete(timerId);
+                callback();
+            }, delay);
+            timers.add(timerId);
+            return timerId;
+        };
 
         const finishAnimation = () => {
             if (finished) return;
             finished = true;
-            clearTimeout(timeoutRef.current);
+            timers.forEach((timerId) => clearTimeout(timerId));
+            timers.clear();
             resolve();
         };
 
-        // Safety net for intermittent timer drift issues that could keep the final draw hanging.
-        timeoutRef.current = setTimeout(() => {
-            setDisplayValue(String(winnerEntry));
-            finishAnimation();
-        }, slowMoDuration + 5000);
-        
         const animationStart = Date.now();
         
         if (drawMode === 'names') {
+            // Safety net remains independent from the animation-loop timer.
+            schedule(() => {
+                setDisplayValue(String(winnerEntry));
+                finishAnimation();
+            }, slowMoDuration + 5000);
+
             const nameAnimationLoop = () => {
                 const elapsed = Date.now() - animationStart;
                 if (elapsed >= slowMoDuration) {
@@ -840,15 +898,17 @@ export default function HostView() {
                 const progress = elapsed / slowMoDuration;
                 const easing = 1 - Math.pow(1 - progress, 2);
                 const nextDelay = 50 + easing * 400;
-                timeoutRef.current = setTimeout(nameAnimationLoop, nextDelay);
+                schedule(nameAnimationLoop, nextDelay);
             };
             nameAnimationLoop();
         } else {
             const winnerDigits = getDigits(winnerEntry);
+            const grandStagger = Math.min(550, 2800 / Math.max(winnerDigits.length - 1, 1));
+            const grandDurationStep = Math.min(450, 1800 / Math.max(winnerDigits.length - 1, 1));
             const reelConfigs = winnerDigits.map((_, index) => {
-                const start = index * 550;
+                const start = index * (isGrandFinal ? grandStagger : 550);
                 const duration = isGrandFinal
-                    ? 2800 + index * 650
+                    ? 4800 + index * grandDurationStep
                     : 1300 + index * 350;
                 return { start, duration };
             });
@@ -856,6 +916,11 @@ export default function HostView() {
                 (maxDuration, reel) => Math.max(maxDuration, reel.start + reel.duration),
                 0,
             );
+
+            schedule(() => {
+                setDisplayValue(String(winnerEntry));
+                finishAnimation();
+            }, animationTotalDuration + 5000);
             
             const animationLoop = () => {
                 const elapsed = Date.now() - animationStart;
@@ -893,7 +958,7 @@ export default function HostView() {
                         newDisplayDigits[finalDigitIndex] = (finalDigit + 1) % 10;
                     }
                     setDisplayValue(newDisplayDigits.join(''));
-                    timeoutRef.current = setTimeout(animationLoop, 550);
+                    schedule(animationLoop, 850);
                     return;
                 }
 
@@ -902,7 +967,7 @@ export default function HostView() {
 
                 const globalProgress = Math.min(1, elapsed / animationTotalDuration);
                 nextDelay = 40 + globalProgress * 170;
-                timeoutRef.current = setTimeout(animationLoop, nextDelay);
+                schedule(animationLoop, nextDelay);
             };
             animationLoop();
         }
@@ -993,7 +1058,16 @@ export default function HostView() {
     almostTriggered.current = false;
 
     const currentPrizeName = getPrizeName();
+    const isGrandPrize = isGrandPrizeDraw(winnersHistory.length, prizes.length);
     setCurrentPrize(currentPrizeName);
+    if (isGrandPrize) {
+      setGrandFinalePhase('build');
+      clearTimeout(finaleTimeoutRef.current);
+      playGrandFinaleBuild();
+    } else {
+      setGrandFinalePhase('idle');
+      playDrumroll();
+    }
 
     const drawnTickets = [];
     let tempPool = [...sourcePool];
@@ -1019,11 +1093,21 @@ export default function HostView() {
     const nextEligibleCount = noRepeatAcrossPrizes ? sourcePool.length - drawnTickets.length : nextRemaining.length;
     setAuditLog((prev) => [...prev, createAuditEntry({ mode: 'standard', context: currentPrizeName, selected: drawnTickets, remainingCount: nextEligibleCount })]);
     setShowConfetti(true);
-    playCelebration();
-    setTimeout(() => setShowConfetti(false), 5000);
+    if (isGrandPrize) {
+      setGrandFinalePhase('reveal');
+      playGrandFinaleReveal();
+      finaleTimeoutRef.current = setTimeout(() => {
+        setShowConfetti(false);
+        setGrandFinalePhase('idle');
+      }, 9000);
+    } else {
+      playCelebration();
+      finaleTimeoutRef.current = setTimeout(() => setShowConfetti(false), 5000);
+    }
     } catch (err) {
       console.error('Draw failed', err);
       setError('The draw could not be completed. Please try again.');
+      setGrandFinalePhase('idle');
     } finally {
       drawLockRef.current = false;
       setDrawing(false);
@@ -1128,8 +1212,11 @@ export default function HostView() {
   }, [exportAssignmentTrigger, theme, title, lastAssignmentResult]);
 
   useEffect(() => {
+    const animationTimers = animationTimersRef.current;
     return () => {
-        clearTimeout(timeoutRef.current);
+        animationTimers.forEach((timerId) => clearTimeout(timerId));
+        animationTimers.clear();
+        clearTimeout(finaleTimeoutRef.current);
         clearInterval(chargeIntervalRef.current);
         chargeLockRef.current = false;
         drawLockRef.current = false;
@@ -1178,6 +1265,8 @@ export default function HostView() {
     backgroundPosition: 'center',
   };
   const showLetterGlitch = theme === 'Event Night' && !backgroundImage;
+  const isGrandFinaleActive = grandFinalePhase !== 'idle';
+  const isGrandFinaleReveal = grandFinalePhase === 'reveal';
 
   return (
     <div style={mainStyle} className="relative flex flex-col items-center justify-center min-h-screen text-[var(--text-color)] p-4 pb-20 sm:pb-4 gap-3 sm:gap-6 font-sans overflow-hidden transition-all duration-500 bg-[var(--bg-color)]">
@@ -1194,6 +1283,13 @@ export default function HostView() {
         </div>
       )}
       <AnimatePresence>
+        {isGrandFinaleActive && (
+          <motion.div key="grand-finale" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="contents">
+            <GrandFinale phase={grandFinalePhase} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
         {showConfetti && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1205,7 +1301,7 @@ export default function HostView() {
           />
         )}
               </AnimatePresence>
-      {showConfetti && Array.from({ length: 70 }).map((_, i) => <ConfettiParticle key={i} colors={currentTheme['--confetti-colors']} />)}
+      {showConfetti && Array.from({ length: isGrandFinaleReveal ? 180 : 70 }).map((_, i) => <ConfettiParticle key={i} colors={currentTheme['--confetti-colors']} grand={isGrandFinaleReveal} />)}
       
        {logo && <img src={logo} alt="Event Logo" className="absolute top-4 left-4 h-16 w-auto z-30" />}
        
@@ -1640,28 +1736,54 @@ export default function HostView() {
 
       <div className="flex flex-col items-center z-20">
         <AnimatePresence>
-            {drawing && (
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="text-2xl font-bold mb-2" style={{color: 'var(--title-color)'}}>
+            {isGrandFinaleActive ? (
+                <motion.div
+                  key="grand-prize-heading"
+                  initial={{ opacity: 0, scale: 0.7, y: -20 }}
+                  animate={{ opacity: 1, scale: isGrandFinaleReveal ? [1, 1.08, 1] : 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  transition={{ scale: { duration: 0.85, repeat: isGrandFinaleReveal ? Infinity : 0 } }}
+                  className="mb-3 rounded-full border border-yellow-300/70 bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 px-5 py-2 text-sm sm:text-lg font-black uppercase tracking-[0.2em] text-slate-950 shadow-[0_0_30px_rgba(250,204,21,0.65)]"
+                >
+                  {isGrandFinaleReveal ? 'Grand Prize Winner' : `Grand Prize Finale · ${currentPrize}`}
+                </motion.div>
+            ) : drawing && (
+                <motion.div key="standard-draw-heading" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="text-2xl font-bold mb-2" style={{color: 'var(--title-color)'}}>
                     Now Drawing: {currentPrize}
                 </motion.div>
             )}
         </AnimatePresence>
         <motion.div
             ref={displayRef}
-            className="rounded-2xl shadow-inner flex items-center justify-center p-4 border-4"
+            className={`relative rounded-2xl shadow-inner flex items-center justify-center p-4 border-4 ${isGrandFinaleActive ? 'overflow-visible' : ''}`}
             style={{
                 backgroundColor: 'var(--display-bg)',
-                borderColor: 'var(--display-border)',
+                borderColor: isGrandFinaleActive ? '#fde047' : 'var(--display-border)',
                 width: displayBoxComputedWidth,
                 minHeight: `${displayBoxHeight}px`,
                 height: 'auto',
                 maxHeight: 'min(45vh, 360px)',
-                overflowY: 'auto',
+                overflowY: isGrandFinaleActive ? 'visible' : 'auto',
             }}
-            animate={pulse ? {boxShadow: ['0 0 0px #fff', '0 0 40px #fff', '0 0 0px #fff']} : {}}
-            transition={pulse ? {duration: 0.8, ease: 'easeInOut'} : {}}
+            animate={isGrandFinaleReveal
+              ? { scale: [1, 1.06, 1.02], boxShadow: ['0 0 25px rgba(250,204,21,0.4)', '0 0 100px rgba(250,204,21,0.95)', '0 0 55px rgba(250,204,21,0.72)'] }
+              : isGrandFinaleActive
+                ? { scale: [1, 1.015, 1], boxShadow: ['0 0 18px rgba(250,204,21,0.3)', '0 0 55px rgba(250,204,21,0.68)', '0 0 18px rgba(250,204,21,0.3)'] }
+                : pulse ? {boxShadow: ['0 0 0px #fff', '0 0 40px #fff', '0 0 0px #fff']} : {}}
+            transition={isGrandFinaleReveal
+              ? { duration: 1.25, ease: 'easeOut' }
+              : isGrandFinaleActive
+                ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' }
+                : pulse ? {duration: 0.8, ease: 'easeInOut'} : {}}
             onAnimationComplete={() => setPulse(false)}
         >
+            {isGrandFinaleActive && (
+              <motion.div
+                className="pointer-events-none absolute -inset-3 rounded-[1.5rem] border border-yellow-200/60"
+                animate={{ opacity: [0.3, 1, 0.3], scale: [0.98, 1.03, 0.98] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              />
+            )}
             {operationMode === 'standard' && drawMode === 'numbers' ? (
                 <div lang={displayTypography.lang} className="flex items-center font-bold max-w-full" style={{...displayTypography.style, color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontSize: displayNumberFontSize, lineHeight: displayLineHeight, fontVariantNumeric: 'tabular-nums lining-nums'}}>
                     {getDigits(displayValue).map((digit, index) => (

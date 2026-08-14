@@ -16,3 +16,48 @@
     text-rendering: optimizeLegibility;
   }
 }
+
+.grand-finale-rays {
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(253, 224, 71, 0.2) 0deg 6deg,
+    transparent 6deg 18deg
+  );
+  -webkit-mask-image: radial-gradient(circle, black 0%, rgba(0, 0, 0, 0.7) 42%, transparent 72%);
+  mask-image: radial-gradient(circle, black 0%, rgba(0, 0, 0, 0.7) 42%, transparent 72%);
+}
+
+.grand-finale-spotlight {
+  background: linear-gradient(90deg, transparent, rgba(255, 248, 200, 0.3), transparent);
+  clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
+  filter: blur(12px);
+}
+
+.grand-finale-spark::before,
+.grand-finale-spark::after {
+  background: currentColor;
+  border-radius: 999px;
+  content: '';
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.grand-finale-spark::before {
+  height: 100%;
+  width: 2px;
+}
+
+.grand-finale-spark::after {
+  height: 2px;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grand-finale-rays,
+  .grand-finale-spotlight,
+  .grand-finale-spark {
+    animation: none !important;
+  }
+}

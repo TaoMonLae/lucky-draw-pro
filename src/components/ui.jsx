@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 
 export const Button = ({ children, className, ...props }) => (
@@ -11,12 +11,28 @@ export const Input = (props) => (
   <input className="border rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-[var(--button-primary-bg)] focus:outline-none shadow-sm" {...props} />
 );
 
-export const ConfettiParticle = ({ colors, ...props }) => (
-  <motion.div
-    className="absolute rounded-full z-50"
-    animate={{ y: '100vh', opacity: [1, 1, 0] }}
-    transition={{ duration: Math.random() * 2 + 3, ease: 'easeIn' }}
-    style={{ left: `${Math.random() * 100}vw`, top: `-${Math.random() * 20}vh`, width: `${Math.random() * 10 + 5}px`, height: `${Math.random() * 10 + 5}px`, backgroundColor: colors[Math.floor(Math.random() * colors.length)] }}
-    {...props}
-  />
-);
+export const ConfettiParticle = ({ colors, grand = false, ...props }) => {
+  // Keep each particle's trajectory stable when the clock or draw state re-renders.
+  const particle = useMemo(() => ({
+    color: colors[Math.floor(Math.random() * colors.length)],
+    delay: Math.random() * (grand ? 1.2 : 0.35),
+    duration: Math.random() * 2 + (grand ? 3.8 : 3),
+    height: Math.random() * (grand ? 18 : 10) + 5,
+    left: Math.random() * 100,
+    rotation: (Math.random() > 0.5 ? 1 : -1) * (360 + Math.random() * 720),
+    sway: (Math.random() - 0.5) * (grand ? 260 : 120),
+    top: Math.random() * 20,
+    width: Math.random() * (grand ? 9 : 10) + 5,
+  }), [colors, grand]);
+
+  return (
+    <motion.div
+      className={`absolute z-50 ${grand ? 'rounded-sm' : 'rounded-full'}`}
+      initial={{ opacity: 1, rotate: 0, x: 0, y: 0 }}
+      animate={{ y: '110vh', x: particle.sway, rotate: particle.rotation, opacity: [1, 1, 0] }}
+      transition={{ duration: particle.duration, delay: particle.delay, ease: 'easeIn' }}
+      style={{ left: `${particle.left}vw`, top: `-${particle.top}vh`, width: `${particle.width}px`, height: `${particle.height}px`, backgroundColor: particle.color }}
+      {...props}
+    />
+  );
+};
