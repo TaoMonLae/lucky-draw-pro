@@ -60,6 +60,9 @@ export function toPublicDrawState(appState) {
     version: 1,
     title: typeof appState.title === 'string' ? appState.title.slice(0, 200) : 'Lucky Draw',
     subtitle: typeof appState.subtitle === 'string' ? appState.subtitle.slice(0, 300) : '',
+    titleFont: typeof appState.titleFont === 'string' ? appState.titleFont.slice(0, 500) : undefined,
+    subtitleFont: typeof appState.subtitleFont === 'string' ? appState.subtitleFont.slice(0, 500) : undefined,
+    displayFont: typeof appState.displayFont === 'string' ? appState.displayFont.slice(0, 500) : undefined,
     logo: typeof appState.logo === 'string' && appState.logo.length <= 250_000 ? appState.logo : null,
     winnersHistory: Array.isArray(appState.winnersHistory) ? appState.winnersHistory : [],
     operationMode: appState.operationMode || 'standard',
@@ -85,5 +88,8 @@ export function isValidPublicDrawState(value) {
     winnersHistory: value.winnersHistory,
     operationMode: value.operationMode,
     lastAssignmentResult: value.lastAssignmentResult,
+    titleFont: value.titleFont,
+    subtitleFont: value.subtitleFont,
+    displayFont: value.displayFont,
   });
 }

@@ -16,6 +16,7 @@ import { buildPublicViewUrl } from '../utils/publicViewUrl';
 import { useRealtimePublisher } from '../hooks/useRealtimePublisher';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { clearRoomCredentials, createRoomCredentials, loadRoomCredentials, saveRoomCredentials } from '../utils/realtimeRoom';
+import { getTypographyProps } from '../utils/typography';
 import LetterGlitch from './LetterGlitch';
 
 const DISPLAY_DEFAULTS = {
@@ -1165,6 +1166,11 @@ export default function HostView() {
   const numberFontRem = Math.min(displayFontSize, Math.max(28, (displayBoxWidth - 48) / Math.max(maxDigits, 1))) / 16;
   const numberViewportMax = Math.min(24, 80 / Math.max(maxDigits, 1));
   const displayNumberFontSize = `clamp(1.75rem, ${numberFontRem}rem, ${numberViewportMax}vw)`;
+  const titleTypography = getTypographyProps(title, titleFont, titleLetterSpacing);
+  const subtitleTypography = getTypographyProps(subtitle, subtitleFont, subtitleLetterSpacing);
+  const displayTypography = getTypographyProps(String(displayValue ?? ''), displayFont, displayLetterSpacing);
+  const shapedTitle = (value) => getTypographyProps(String(value ?? ''), titleFont, 0);
+  const shapedDisplay = (value) => getTypographyProps(String(value ?? ''), displayFont, 0);
   const mainStyle = {
     ...currentTheme,
     backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
@@ -1284,6 +1290,9 @@ export default function HostView() {
                                     {Object.keys(themes).map(themeName => (<option key={themeName} value={themeName}>{themeName}</option>))}
                                 </select>
                             </div>
+                            <div className="rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/40 p-3 text-xs text-[var(--text-muted)]">
+                                Burmese text uses native OpenType shaping with kerning and ligatures. Tracking is automatically disabled for Myanmar text, and Mon-specific characters use the complete Unicode-safe Noto Sans Myanmar face to prevent broken clusters.
+                            </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Event Title</label>
                                 <div className="flex items-center gap-2">
@@ -1304,7 +1313,7 @@ export default function HostView() {
                                         <Input type="range" min="0.9" max="2.2" step="0.05" value={titleLineSpacing} onChange={e => setTitleLineSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                     <div>
-                                        <label className="text-xs mt-1 block">Kerning / Letter Spacing (px)</label>
+                                        <label className="text-xs mt-1 block">Letter Spacing (Latin only)</label>
                                         <Input type="range" min="-1" max="6" step="0.1" value={titleLetterSpacing} onChange={e => setTitleLetterSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                 </div>
@@ -1329,7 +1338,7 @@ export default function HostView() {
                                         <Input type="range" min="1" max="2.5" step="0.05" value={subtitleLineSpacing} onChange={e => setSubtitleLineSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                     <div>
-                                        <label className="text-xs mt-1 block">Kerning / Letter Spacing (px)</label>
+                                        <label className="text-xs mt-1 block">Letter Spacing (Latin only)</label>
                                         <Input type="range" min="-1" max="4" step="0.1" value={subtitleLetterSpacing} onChange={e => setSubtitleLetterSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                 </div>
@@ -1362,7 +1371,7 @@ export default function HostView() {
                                         <Input type="range" min="0.85" max="1.5" step="0.01" value={displayLineHeight} onChange={e => setDisplayLineHeight(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="text-xs mt-1 block">Display Letter Spacing (px)</label>
+                                        <label className="text-xs mt-1 block">Display Letter Spacing (Latin only)</label>
                                         <Input type="range" min="-2" max="16" step="0.1" value={displayLetterSpacing} onChange={e => setDisplayLetterSpacing(parseFloat(e.target.value))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                 </div>
@@ -1625,8 +1634,8 @@ export default function HostView() {
               </AnimatePresence>
       
       <div className="text-center z-10 w-full pl-8 sm:pl-0" style={{textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
-        <h1 className="font-bold break-words" style={{color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, letterSpacing: `${titleLetterSpacing}px`, fontKerning: 'normal', fontFamily: titleFont, fontSize: `clamp(2rem, ${titleFontSize}px, 10vw)`, textRendering: 'optimizeLegibility'}}>{title}</h1>
-        <p className="mt-2 break-words" style={{color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, letterSpacing: `${subtitleLetterSpacing}px`, fontKerning: 'normal', fontFamily: subtitleFont, fontSize: `clamp(0.875rem, ${subtitleFontSize}px, 6vw)`, textRendering: 'optimizeLegibility'}}>{subtitle}</p>
+        <h1 lang={titleTypography.lang} className="font-bold break-words" style={{...titleTypography.style, color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, fontSize: `clamp(2rem, ${titleFontSize}px, 10vw)`}}>{title}</h1>
+        <p lang={subtitleTypography.lang} className="mt-2 break-words" style={{...subtitleTypography.style, color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, fontSize: `clamp(0.875rem, ${subtitleFontSize}px, 6vw)`}}>{subtitle}</p>
       </div>
 
       <div className="flex flex-col items-center z-20">
@@ -1654,7 +1663,7 @@ export default function HostView() {
             onAnimationComplete={() => setPulse(false)}
         >
             {operationMode === 'standard' && drawMode === 'numbers' ? (
-                <div className="flex items-center font-bold max-w-full" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: displayNumberFontSize, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, fontVariantNumeric: 'tabular-nums lining-nums'}}>
+                <div lang={displayTypography.lang} className="flex items-center font-bold max-w-full" style={{...displayTypography.style, color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontSize: displayNumberFontSize, lineHeight: displayLineHeight, fontVariantNumeric: 'tabular-nums lining-nums'}}>
                     {getDigits(displayValue).map((digit, index) => (
                         <div key={index} className="w-[1ch] text-center overflow-hidden">
                             <AnimatePresence mode="popLayout">
@@ -1666,7 +1675,7 @@ export default function HostView() {
                     ))}
                 </div>
             ) : (
-                 <div className="font-bold px-4 text-center w-full" style={{color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontFamily: displayFont, fontSize: displayNameFontSize, lineHeight: displayLineHeight, letterSpacing: `${displayLetterSpacing}px`, wordBreak: 'break-word', overflowWrap: 'break-word'}}>
+                 <div lang={displayTypography.lang} className="font-bold px-4 text-center w-full" style={{...displayTypography.style, color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontSize: displayNameFontSize, lineHeight: displayLineHeight, wordBreak: 'break-word', overflowWrap: 'break-word'}}>
                     <AnimatePresence mode="popLayout">
                         <motion.span key={displayValue} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
                             {displayValue}
@@ -1810,8 +1819,8 @@ export default function HostView() {
             {winnerToExport && (
                  <div style={{width: 500, height: 300, ...themes[theme]}} className="flex flex-col items-center justify-center p-8 relative bg-[var(--display-bg)] text-[var(--text-color)]">
                      {logo && <img src={logo} alt="Logo" className="absolute top-4 left-4 h-12 w-auto" />}
-                     <h3 className="text-4xl font-bold" style={{color: 'var(--title-color)'}}>{winnerToExport.prize}</h3>
-                     <div className="text-8xl font-mono font-bold my-4" style={{color: 'var(--display-text)'}}>{winnerToExport.ticket}</div>
+                     <h3 lang={shapedTitle(winnerToExport.prize).lang} className="text-4xl font-bold" style={{...shapedTitle(winnerToExport.prize).style, color: 'var(--title-color)'}}>{winnerToExport.prize}</h3>
+                     <div lang={shapedDisplay(winnerToExport.ticket).lang} className="text-8xl font-bold my-4" style={{...shapedDisplay(winnerToExport.ticket).style, color: 'var(--display-text)'}}>{winnerToExport.ticket}</div>
                      <p className="text-xl" style={{color: 'var(--text-muted)'}}>Congratulations!</p>
                  </div>
             )}
@@ -1820,14 +1829,14 @@ export default function HostView() {
             {exportAllTrigger && (
                  <div style={{ width: 900, padding: 40, boxSizing: 'border-box', ...themes[theme] }}>
                      {logo && <img src={logo} alt="Logo" style={{ height: 80, width: 'auto', marginBottom: 24 }} />}
-                     <h2 style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 24, color: themes[theme]['--title-color'] }}>{title} - Winners</h2>
+                     <h2 lang={shapedTitle(title).lang} style={{ ...shapedTitle(title).style, fontSize: 32, fontWeight: 'bold', marginBottom: 24, color: themes[theme]['--title-color'] }}>{title} - Winners</h2>
                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px 32px' }}>
                         {winnersHistory.map(group => (
                             <div key={group.prize}>
-                                <h3 style={{ fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{group.prize}</h3>
+                                <h3 lang={shapedTitle(group.prize).lang} style={{ ...shapedTitle(group.prize).style, fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{group.prize}</h3>
                                 <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                                     {group.tickets.map(ticket => (
-                                      <li key={ticket} style={{ fontFamily: 'monospace', fontSize: 18, marginBottom: 4, color: themes[theme]['--display-text'] }}>{ticket}</li>
+                                      <li lang={shapedDisplay(ticket).lang} key={ticket} style={{ ...shapedDisplay(ticket).style, fontSize: 18, marginBottom: 4, color: themes[theme]['--display-text'] }}>{ticket}</li>
                                     ))}
                                 </ul>
                             </div>
@@ -1840,7 +1849,7 @@ export default function HostView() {
             {exportAssignmentTrigger && lastAssignmentResult && (
                 <div style={{ width: 900, padding: 40, boxSizing: 'border-box', ...themes[theme] }}>
                     {logo && <img src={logo} alt="Logo" style={{ height: 80, width: 'auto', marginBottom: 24 }} />}
-                    <h2 style={{ fontSize: 32, fontWeight: 'bold', marginBottom: 8, color: themes[theme]['--title-color'] }}>
+                    <h2 lang={shapedTitle(title).lang} style={{ ...shapedTitle(title).style, fontSize: 32, fontWeight: 'bold', marginBottom: 8, color: themes[theme]['--title-color'] }}>
                         {title} - {lastAssignmentResult.mode === 'team-divider' ? 'Team Assignment' : 'Role Assignment'}
                     </h2>
                     <p style={{ fontSize: 14, marginBottom: 24, color: themes[theme]['--text-muted'] }}>{new Date().toLocaleString()}</p>
@@ -1848,20 +1857,20 @@ export default function HostView() {
                         {lastAssignmentResult.mode === 'team-divider'
                             ? lastAssignmentResult.teams.map(team => (
                                 <div key={team.teamName}>
-                                    <h3 style={{ fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{team.teamName}</h3>
+                                    <h3 lang={shapedTitle(team.teamName).lang} style={{ ...shapedTitle(team.teamName).style, fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{team.teamName}</h3>
                                     <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                                         {team.members.map((member, i) => (
-                                            <li key={i} style={{ fontFamily: 'monospace', fontSize: 16, marginBottom: 4, color: themes[theme]['--display-text'] }}>{member}</li>
+                                            <li lang={shapedDisplay(member).lang} key={i} style={{ ...shapedDisplay(member).style, fontSize: 16, marginBottom: 4, color: themes[theme]['--display-text'] }}>{member}</li>
                                         ))}
                                     </ul>
                                 </div>
                             ))
                             : lastAssignmentResult.assignments.map(assignment => (
                                 <div key={assignment.role}>
-                                    <h3 style={{ fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{assignment.role}</h3>
+                                    <h3 lang={shapedTitle(assignment.role).lang} style={{ ...shapedTitle(assignment.role).style, fontSize: 22, fontWeight: 'bold', borderBottom: `2px solid ${themes[theme]['--panel-border']}`, paddingBottom: 4, marginBottom: 8, color: themes[theme]['--title-color'] }}>{assignment.role}</h3>
                                     <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                                         {assignment.participants.map((p, i) => (
-                                            <li key={i} style={{ fontFamily: 'monospace', fontSize: 16, marginBottom: 4, color: themes[theme]['--display-text'] }}>{p}</li>
+                                            <li lang={shapedDisplay(p).lang} key={i} style={{ ...shapedDisplay(p).style, fontSize: 16, marginBottom: 4, color: themes[theme]['--display-text'] }}>{p}</li>
                                         ))}
                                     </ul>
                                 </div>

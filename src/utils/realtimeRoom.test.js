@@ -50,6 +50,9 @@ describe('public realtime state', () => {
     const publicState = toPublicDrawState({
       title: 'Event',
       subtitle: 'Live',
+      titleFont: "'Z20 Khit Haungg', sans-serif",
+      subtitleFont: "'Z11 Myan Sans', sans-serif",
+      displayFont: "'Z06 Walone', sans-serif",
       initialEntries: ['Private Person'],
       auditLog: [{ selected: ['Private Person'] }],
       winnersHistory: [{ prize: 'Prize', tickets: ['Winner'] }],
@@ -59,6 +62,7 @@ describe('public realtime state', () => {
     expect(publicState).not.toHaveProperty('initialEntries');
     expect(publicState).not.toHaveProperty('auditLog');
     expect(publicState.winnersHistory[0].tickets).toEqual(['Winner']);
+    expect(publicState.titleFont).toContain('Z20 Khit Haungg');
     expect(isValidPublicDrawState(publicState)).toBe(true);
   });
 

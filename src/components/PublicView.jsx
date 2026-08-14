@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePublicSync } from '../hooks/usePublicSync';
+import { getTypographyProps } from '../utils/typography';
 
 const SYNC_LABELS = {
   connecting: 'Connecting…',
@@ -9,6 +10,11 @@ const SYNC_LABELS = {
   error: 'Connection error',
   closed: 'Sharing stopped',
 };
+
+function ShapedText({ as: Tag = 'span', children, fontFamily, className, style }) {
+  const typography = getTypographyProps(React.Children.toArray(children).join(''), fontFamily, 0);
+  return <Tag lang={typography.lang} className={className} style={{ ...typography.style, ...style }}>{children}</Tag>;
+}
 
 export default function PublicView({ roomId = '' }) {
   const { drawState, syncStatus, errorMessage } = usePublicSync({ roomId });
@@ -25,7 +31,17 @@ export default function PublicView({ roomId = '' }) {
     );
   }
 
-  const { title = 'Lucky Draw', logo, winnersHistory = [], operationMode = 'standard', lastAssignmentResult } = drawState;
+  const {
+    title = 'Lucky Draw',
+    subtitle = '',
+    titleFont = "'Lobster', 'Noto Sans Myanmar', sans-serif",
+    subtitleFont = "'Noto Sans Myanmar', 'Myanmar Text', sans-serif",
+    displayFont = "'Noto Sans Myanmar', 'Myanmar Text', sans-serif",
+    logo,
+    winnersHistory = [],
+    operationMode = 'standard',
+    lastAssignmentResult,
+  } = drawState;
   const assignmentResult = lastAssignmentResult?.mode === operationMode ? lastAssignmentResult : null;
   const isTeamView = assignmentResult?.mode === 'team-divider';
   const isRoleView = assignmentResult?.mode === 'role-selector';
@@ -44,14 +60,16 @@ export default function PublicView({ roomId = '' }) {
       <div className="max-w-4xl mx-auto">
         {errorMessage && <p role="alert" className="mb-4 rounded bg-red-100 px-3 py-2 text-center text-sm text-red-800">{errorMessage}</p>}
         {logo && <img src={logo} alt="Event Logo" className="h-24 w-auto mx-auto mb-6" />}
-        <h1 className="text-3xl sm:text-5xl font-bold text-center mb-6 sm:mb-8 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{title} - {headingSuffix}</h1>
+        <ShapedText as="h1" fontFamily={titleFont} className="text-3xl sm:text-5xl font-bold text-center break-words">{title} - {headingSuffix}</ShapedText>
+        {subtitle && <ShapedText as="p" fontFamily={subtitleFont} className="mt-2 mb-6 sm:mb-8 text-center text-lg sm:text-xl break-words text-[#665757]">{subtitle}</ShapedText>}
+        {!subtitle && <div className="mb-6 sm:mb-8" />}
         {isTeamView ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {assignmentResult.teams.map((team, index) => (
               <div key={`${team.teamName}-${index}`} className="bg-white bg-opacity-50 p-4 sm:p-6 rounded-lg shadow-lg border border-gray-300 min-w-0">
-                <h3 className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{team.teamName}</h3>
+                <ShapedText as="h3" fontFamily={titleFont} className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words">{team.teamName}</ShapedText>
                 <ul className="space-y-2">
-                  {team.members.map((member, memberIndex) => <li key={`${member}-${memberIndex}`} className="text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{member}</li>)}
+                  {team.members.map((member, memberIndex) => <ShapedText as="li" fontFamily={displayFont} key={`${member}-${memberIndex}`} className="text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{member}</ShapedText>)}
                 </ul>
               </div>
             ))}
@@ -60,9 +78,9 @@ export default function PublicView({ roomId = '' }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {assignmentResult.assignments.map((assignment, index) => (
               <div key={`${assignment.role}-${index}`} className="bg-white bg-opacity-50 p-4 sm:p-6 rounded-lg shadow-lg border border-gray-300 min-w-0">
-                <h3 className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{assignment.role}</h3>
+                <ShapedText as="h3" fontFamily={titleFont} className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words">{assignment.role}</ShapedText>
                 <ul className="space-y-2">
-                  {assignment.participants.map((participant, participantIndex) => <li key={`${participant}-${participantIndex}`} className="text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{participant}</li>)}
+                  {assignment.participants.map((participant, participantIndex) => <ShapedText as="li" fontFamily={displayFont} key={`${participant}-${participantIndex}`} className="text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{participant}</ShapedText>)}
                 </ul>
               </div>
             ))}
@@ -71,9 +89,9 @@ export default function PublicView({ roomId = '' }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {winnersHistory.map((group, groupIndex) => (
               <div key={`${group.prize}-${groupIndex}`} className="bg-white bg-opacity-50 p-4 sm:p-6 rounded-lg shadow-lg border border-gray-300 min-w-0">
-                <h3 className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words" style={{ fontFamily: "'Lobster', cursive" }}>{group.prize}</h3>
+                <ShapedText as="h3" fontFamily={titleFont} className="text-2xl sm:text-3xl font-bold border-b-2 border-gray-300 pb-2 mb-4 break-words">{group.prize}</ShapedText>
                 <ul className="space-y-2">
-                  {group.tickets.map((ticket, ticketIndex) => <li key={`${ticket}-${ticketIndex}`} className="font-mono text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{ticket}</li>)}
+                  {group.tickets.map((ticket, ticketIndex) => <ShapedText as="li" fontFamily={displayFont} key={`${ticket}-${ticketIndex}`} className="text-xl sm:text-2xl bg-gray-100 px-3 py-1 rounded break-words">{ticket}</ShapedText>)}
                 </ul>
               </div>
             ))}

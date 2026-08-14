@@ -14,6 +14,7 @@ Lucky Draw Pro is a customizable React application for running live raffles, pri
 - Winners, assignments, and audit-log exports in CSV, JSON, and PNG formats
 - Cross-device public winners view using Supabase Realtime, with a same-browser fallback
 - Event themes, typography controls, logos, and custom background images
+- Private Burmese display-font support with Unicode-safe Mon fallback and OpenType shaping
 - Animated LetterGlitch background for the default Event Night theme
 - Responsive layouts for desktop, tablets, phones, and public displays
 
@@ -87,6 +88,16 @@ REACT_APP_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
 6. Open **Settings → Public View**, start a room, and share its generated link.
 
 Use a Supabase publishable key in the browser. Never put a secret key or `service_role` key in a `REACT_APP_*` variable.
+
+## Private Burmese Fonts
+
+Licensed font binaries belong in `public/private-fonts/`. That directory and its generated `build/private-fonts/` copy are excluded by `.gitignore`, so `git add` and normal public-repository pushes do not publish the paid files. The committed `public/privateFonts.css` file contains only family names and local paths.
+
+The application enables OpenType kerning, common/contextual ligatures, glyph composition, localized forms, and mark positioning. Letter spacing is automatically reset to zero for Unicode Myanmar text because tracking can damage complex-script clusters.
+
+Most of the supplied private faces cover core Burmese but do not include the dedicated Mon characters U+105A–U+1060. When those characters are detected, the complete text run automatically switches to Noto Sans Myanmar and receives `lang="mnw"`, preventing a Mon syllable from being split across incompatible fonts.
+
+Important: excluding binaries from Git does not itself grant web-distribution rights. Confirm that the font license permits web embedding before including `public/private-fonts/` in a hosted deployment. A Git-based deployment cannot receive these ignored files unless they are delivered separately through an authorized private deployment process.
 
 ## Available Scripts
 

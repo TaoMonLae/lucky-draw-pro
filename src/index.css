@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  button,
+  input,
+  select,
+  textarea {
+    font-family: Inter, 'Noto Sans Myanmar', 'Myanmar Text', Padauk, Tharlon, Pyidaungsu, sans-serif;
+    font-kerning: normal;
+    font-variant-ligatures: common-ligatures contextual;
+    font-feature-settings: 'kern' 1, 'liga' 1, 'clig' 1, 'ccmp' 1, 'locl' 1, 'mark' 1, 'mkmk' 1;
+    text-rendering: optimizeLegibility;
+  }
+}

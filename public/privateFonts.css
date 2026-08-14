@@ -1,0 +1,229 @@
+/*
+ * Licensed font binaries live in public/private-fonts/ and are intentionally
+ * excluded from Git. Keep the original files unmodified to preserve their
+ * OpenType Myanmar shaping and licensing metadata.
+ */
+
+@font-face {
+  font-family: 'Sai K2 Handwriting';
+  src: url('/private-fonts/SaiK2Handwriting-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z01 Umoe002';
+  src: url('/private-fonts/Z01-Umoe002-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z02 Typewriter';
+  src: url('/private-fonts/Z02-Typewriter-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z03 Press';
+  src: url('/private-fonts/Z03-Press-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z06 Walone';
+  src: url('/private-fonts/Z06-Walone-Thin.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z06 Walone';
+  src: url('/private-fonts/Z06-Walone-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z06 Walone';
+  src: url('/private-fonts/Z06-Walone-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z07 Modern';
+  src: url('/private-fonts/Z07-Modern.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z08 Strong';
+  src: url('/private-fonts/Z08-Strong-Medium.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z08 Strong';
+  src: url('/private-fonts/Z08-Strong-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z09 Lat Yay Sat';
+  src: url('/private-fonts/Z09LatYaySat-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z10 Cartoon';
+  src: url('/private-fonts/Z10-Cartoon.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z11 Myan Sans';
+  src: url('/private-fonts/Z11-MyanSans-Thin.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z11 Myan Sans';
+  src: url('/private-fonts/Z11-MyanSans-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z11 Myan Sans';
+  src: url('/private-fonts/Z11-MyanSans-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z12 Ahlwan Cafe';
+  src: url('/private-fonts/Z12AhlwanCafe-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z14 Irrawaddy';
+  src: url('/private-fonts/Z14Irrawaddy-VF.ttf') format('truetype-variations');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z15 Korea';
+  src: url('/private-fonts/Z15Korea-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z16 Sahara';
+  src: url('/private-fonts/Z16Sahara-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z16 Sahara';
+  src: url('/private-fonts/Z16Sahara-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z17 Strength';
+  src: url('/private-fonts/Z17Strength-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z17 Strength';
+  src: url('/private-fonts/Z17Strength-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z18 Gabar';
+  src: url('/private-fonts/Z18Gabar-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z20 Khit Haungg';
+  src: url('/private-fonts/Z20-KhitHaungg-Regular.otf') format('opentype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z20 Khit Haungg';
+  src: url('/private-fonts/Z20-KhitHaungg-Medium.otf') format('opentype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z20 Khit Haungg';
+  src: url('/private-fonts/Z20-KhitHaungg-SemiBold.otf') format('opentype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z20 Khit Haungg';
+  src: url('/private-fonts/Z20-KhitHaungg-Bold.otf') format('opentype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Z22 Gantgaw Lann';
+  src: url('/private-fonts/Z22GantgawLann-Regular.otf') format('opentype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
