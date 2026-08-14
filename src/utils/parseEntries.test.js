@@ -1,4 +1,4 @@
-import { normalizeEntries, parseEntries, parseEntriesFromCsv } from './parseEntries';
+import { MAX_ENTRIES, normalizeEntries, parseEntries, parseEntriesFromCsv } from './parseEntries';
 
 describe('parseEntries', () => {
   test('supports mixed commas and line breaks', () => {
@@ -16,6 +16,20 @@ describe('parseEntries', () => {
   test('keeps number range behavior intact', () => {
     const result = parseEntries('001-003', 'numbers');
     expect(result.entries).toEqual(['001', '002', '003']);
+  });
+
+  test('accepts a number range containing exactly 70,000 tickets', () => {
+    const result = parseEntries(`1-${MAX_ENTRIES}`, 'numbers');
+    expect(result.error).toBeUndefined();
+    expect(result.entries).toHaveLength(MAX_ENTRIES);
+    expect(result.entries[0]).toBe('1');
+    expect(result.entries[MAX_ENTRIES - 1]).toBe(String(MAX_ENTRIES));
+  });
+
+  test('rejects a number range containing more than 70,000 tickets', () => {
+    const result = parseEntries(`1-${MAX_ENTRIES + 1}`, 'numbers');
+    expect(result.entries).toBeUndefined();
+    expect(result.error).toMatch(/70,000/);
   });
 
   test('deduplicates number entries while preserving value formatting', () => {
@@ -59,5 +73,12 @@ describe('parseEntriesFromCsv', () => {
     const result = parseEntriesFromCsv('Alice,alice,ALICE', 'names');
     expect(result.entries).toEqual(['Alice']);
     expect(result.duplicateGroups).toHaveLength(1);
+  });
+
+  test('rejects CSV input above the shared entry limit', () => {
+    const csv = Array.from({ length: MAX_ENTRIES + 1 }, (_, index) => `Name ${index + 1}`).join('\n');
+    const result = parseEntriesFromCsv(csv, 'names');
+    expect(result.entries).toEqual([]);
+    expect(result.error).toMatch(/70,000/);
   });
 });
