@@ -15,8 +15,10 @@ import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '
 import { buildPublicViewUrl } from '../utils/publicViewUrl';
 import { useRealtimePublisher } from '../hooks/useRealtimePublisher';
 import { usePublicBroadcast } from '../hooks/usePublicBroadcast';
+import { useRemoteDrawController } from '../hooks/useRemoteDrawController';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { clearRoomCredentials, createRoomCredentials, loadRoomCredentials, saveRoomCredentials } from '../utils/realtimeRoom';
+import { buildRemoteControlUrl, clearRemoteControlCredentials, createRemoteControlCredentials, loadRemoteControlCredentials, saveRemoteControlCredentials } from '../utils/remoteControl';
 import { getTypographyProps } from '../utils/typography';
 import LetterGlitch from './LetterGlitch';
 import GrandFinale from './GrandFinale';
@@ -53,6 +55,21 @@ const LIVE_SYNC_LABELS = {
   live: 'Live',
   error: 'Sync error',
 };
+const REMOTE_LISTENER_LABELS = {
+  unconfigured: 'Setup required',
+  idle: 'Disabled',
+  connecting: 'Connecting…',
+  listening: 'Listening',
+  error: 'Listener error',
+};
+const SETTINGS_SECTIONS = [
+  { id: 'event', icon: '✦', label: 'Event', description: 'Branding, typography, and display' },
+  { id: 'draw', icon: '◎', label: 'Draw', description: 'Participants, fairness, and prizes' },
+  { id: 'sound', icon: '♫', label: 'Sound', description: 'Volume and cue previews' },
+  { id: 'public', icon: '↗', label: 'Audience', description: 'Public display and live sharing' },
+  { id: 'templates', icon: '▦', label: 'Presets', description: 'Quick event configurations' },
+  { id: 'about', icon: 'i', label: 'About', description: 'Application information' },
+];
 
 export default function HostView() {
   const [maxDigits, setMaxDigits] = useState(2);
@@ -103,7 +120,7 @@ export default function HostView() {
   const [theme, setTheme] = useState('Event Night');
   const [logo, setLogo] = useState(null);
   const [backgroundImage, setBackgroundImage] = useState('');
-  const [settingsTab, setSettingsTab] = useState('main');
+  const [settingsTab, setSettingsTab] = useState('event');
   const [charge, setCharge] = useState(0);
   const [isCharging, setIsCharging] = useState(false);
   const [masterVolume, setMasterVolume] = useState(0);
@@ -125,6 +142,7 @@ export default function HostView() {
   const [exportAssignmentTrigger, setExportAssignmentTrigger] = useState(false);
   const [autosaveReady, setAutosaveReady] = useState(false);
   const [liveRoom, setLiveRoom] = useState(() => loadRoomCredentials());
+  const [remoteControl, setRemoteControl] = useState(() => loadRemoteControlCredentials());
   const [roomActionPending, setRoomActionPending] = useState(false);
   const [grandFinalePhase, setGrandFinalePhase] = useState('idle');
 
@@ -141,6 +159,7 @@ export default function HostView() {
   const bgImageInputRef = useRef(null);
   const settingsButtonRef = useRef(null);
   const settingsDialogRef = useRef(null);
+  const historyPanelRef = useRef(null);
   const exportRef = useRef(null);
   const exportAllRef = useRef(null);
   const exportAssignmentRef = useRef(null);
@@ -203,14 +222,19 @@ export default function HostView() {
     publicDisplayValue,
     grandFinalePhase,
     showConfetti,
+    remoteControlReady: !showSettings
+      && !drawing
+      && !isCharging
+      && publicRemainingEntriesCount > 0
+      && (operationMode !== 'standard' || winnersHistory.length < prizes.length),
     completedPrizeCount: winnersHistory.length,
     prizeCount: prizes.length,
     totalEntries: initialEntries.length,
     remainingEntriesCount: publicRemainingEntriesCount,
   }), [
     appState, drawing, currentPrize, publicDisplayValue, grandFinalePhase,
-    showConfetti, winnersHistory.length, prizes, initialEntries.length,
-    publicRemainingEntriesCount,
+    showConfetti, showSettings, isCharging, operationMode, winnersHistory.length,
+    prizes, initialEntries.length, publicRemainingEntriesCount,
   ]);
 
   // --- SESSION MANAGEMENT ---
@@ -300,7 +324,23 @@ export default function HostView() {
     appState: publicLiveState,
     enabled: autosaveReady && Boolean(liveRoom) && !roomActionPending,
   });
+  const remoteListener = useRemoteDrawController({
+    roomId: liveRoom?.roomId || '',
+    writeKey: liveRoom?.writeKey || '',
+    enabled: autosaveReady && Boolean(liveRoom) && Boolean(remoteControl) && !roomActionPending,
+    onDraw: () => showSettings ? undefined : drawActionRef.current(),
+  });
   const publicViewUrl = buildPublicViewUrl(window.location.href, liveRoom?.roomId || '');
+  const remoteControlUrl = remoteControl?.roomId === liveRoom?.roomId
+    ? buildRemoteControlUrl(window.location.href, remoteControl)
+    : '';
+
+  useEffect(() => {
+    if (remoteControl && (!liveRoom || remoteControl.roomId !== liveRoom.roomId)) {
+      clearRemoteControlCredentials();
+      setRemoteControl(null);
+    }
+  }, [liveRoom, remoteControl]);
 
   // Script and Audio Setup
   useAudioEngine({ setScriptsLoaded });
@@ -407,6 +447,22 @@ export default function HostView() {
       settingsButton?.focus();
     };
   }, [showSettings]);
+
+  useEffect(() => {
+    if (!showSettings && !historyPanelOpen) return undefined;
+
+    const closeSurfaceOnOutsideClick = (event) => {
+      if (showSettings && settingsDialogRef.current && !settingsDialogRef.current.contains(event.target)) {
+        setShowSettings(false);
+      }
+      if (historyPanelOpen && historyPanelRef.current && !historyPanelRef.current.contains(event.target)) {
+        setHistoryPanelOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeSurfaceOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', closeSurfaceOnOutsideClick);
+  }, [historyPanelOpen, showSettings]);
 
   // Logic Functions
   const getPrizeName = () => {
@@ -516,14 +572,14 @@ export default function HostView() {
     downloadCsv(`${title.replace(/\s+/g, '-')}-${suffix}.csv`, buildAssignmentCsvRows(lastAssignmentResult));
   };
 
-  const handleCopyPublicViewUrl = async () => {
+  const copyText = async (value) => {
     let copied = false;
     try {
-      await navigator.clipboard.writeText(publicViewUrl);
+      await navigator.clipboard.writeText(value);
       copied = true;
     } catch {
       const textArea = document.createElement('textarea');
-      textArea.value = publicViewUrl;
+      textArea.value = value;
       textArea.setAttribute('readonly', '');
       textArea.style.position = 'fixed';
       textArea.style.opacity = '0';
@@ -533,11 +589,27 @@ export default function HostView() {
       textArea.remove();
     }
 
+    return copied;
+  };
+
+  const handleCopyPublicViewUrl = async () => {
+    const copied = await copyText(publicViewUrl);
     if (copied) {
       setSuccessMessage('Public view link copied!');
       setTimeout(() => setSuccessMessage(''), 3000);
     } else {
       setError('Could not copy the link. Select the URL and copy it manually.');
+      setTimeout(() => setError(''), 4000);
+    }
+  };
+
+  const handleCopyRemoteControlUrl = async () => {
+    const copied = await copyText(remoteControlUrl);
+    if (copied) {
+      setSuccessMessage('Private MC remote link copied!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } else {
+      setError('Could not copy the remote link. Select the URL and copy it manually.');
       setTimeout(() => setError(''), 4000);
     }
   };
@@ -574,6 +646,52 @@ export default function HostView() {
     }
   };
 
+  const enableRemoteControl = async ({ rotated = false } = {}) => {
+    if (!liveRoom || roomActionPending) return;
+    setRoomActionPending(true);
+    setError('');
+    try {
+      const credentials = createRemoteControlCredentials(liveRoom.roomId);
+      const { error: remoteError } = await supabase.rpc('enable_draw_remote_control', {
+        p_room_id: liveRoom.roomId,
+        p_write_key: liveRoom.writeKey,
+        p_remote_key: credentials.remoteKey,
+      });
+      if (remoteError) throw remoteError;
+      saveRemoteControlCredentials(credentials);
+      setRemoteControl(credentials);
+      setSuccessMessage(rotated ? 'A new private MC remote link is ready.' : 'Secure MC remote control enabled.');
+      setTimeout(() => setSuccessMessage(''), 3500);
+    } catch (remoteError) {
+      setError(remoteError.message || 'Could not enable secure remote control. Run the latest Supabase schema and try again.');
+      setTimeout(() => setError(''), 6000);
+    } finally {
+      setRoomActionPending(false);
+    }
+  };
+
+  const disableRemoteControl = async () => {
+    if (!liveRoom || !remoteControl || roomActionPending) return;
+    setRoomActionPending(true);
+    setError('');
+    try {
+      const { error: remoteError } = await supabase.rpc('disable_draw_remote_control', {
+        p_room_id: liveRoom.roomId,
+        p_write_key: liveRoom.writeKey,
+      });
+      if (remoteError) throw remoteError;
+      clearRemoteControlCredentials();
+      setRemoteControl(null);
+      setSuccessMessage('MC remote control disabled. The old link no longer works.');
+      setTimeout(() => setSuccessMessage(''), 3500);
+    } catch (remoteError) {
+      setError(remoteError.message || 'Could not disable remote control.');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setRoomActionPending(false);
+    }
+  };
+
   const stopLiveRoom = async ({ startAnother = false } = {}) => {
     if (!liveRoom || roomActionPending) return;
     let roomClosed = false;
@@ -589,7 +707,9 @@ export default function HostView() {
       roomClosed = true;
 
       clearRoomCredentials();
+      clearRemoteControlCredentials();
       setLiveRoom(null);
+      setRemoteControl(null);
       if (startAnother) {
         await createAndActivateLiveRoom('A new cross-device room is ready. Share the new link.');
       } else {
@@ -1221,12 +1341,17 @@ export default function HostView() {
         if (event.key === 'Escape') setShowSettings(false);
         return;
       }
+      if (event.key === 'Escape' && historyPanelOpen) {
+        setHistoryPanelOpen(false);
+        return;
+      }
       if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
       if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') {
         event.preventDefault();
         drawActionRef.current();
       }
       if (event.key.toLowerCase() === 's') {
+        setHistoryPanelOpen(false);
         setShowSettings(true);
       }
       if (event.key.toLowerCase() === 'f') {
@@ -1240,7 +1365,7 @@ export default function HostView() {
 
     window.addEventListener('keydown', handleShortcuts);
     return () => window.removeEventListener('keydown', handleShortcuts);
-  }, [showSettings]);
+  }, [historyPanelOpen, showSettings]);
 
   useEffect(() => {
     if (winnerToExport && exportRef.current) {
@@ -1366,6 +1491,7 @@ export default function HostView() {
   const showLetterGlitch = theme === 'Event Night' && !backgroundImage;
   const isGrandFinaleActive = grandFinalePhase !== 'idle';
   const isGrandFinaleReveal = grandFinalePhase === 'reveal';
+  const activeSettingsSection = SETTINGS_SECTIONS.find((section) => section.id === settingsTab) || SETTINGS_SECTIONS[0];
 
   return (
     <div style={mainStyle} className="relative flex flex-col items-center justify-center min-h-screen text-[var(--text-color)] p-4 pb-20 sm:pb-4 gap-3 sm:gap-6 font-sans overflow-hidden transition-all duration-500 bg-[var(--bg-color)]">
@@ -1417,7 +1543,7 @@ export default function HostView() {
         </div>
        )}
 
-      <Button ref={settingsButtonRef} aria-label="Open settings" onClick={() => setShowSettings(true)} className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 !bg-gray-700 hover:!bg-gray-600 !p-2 sm:!p-3">
+      <Button ref={settingsButtonRef} aria-label="Open settings" onClick={() => { setHistoryPanelOpen(false); setShowSettings(true); }} className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 !bg-gray-700 hover:!bg-gray-600 !p-2 sm:!p-3">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.73l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.73l.15-.08a2 2 0 0 0-.73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </Button>
 
@@ -1458,26 +1584,43 @@ export default function HostView() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="settings-title"
-                className="absolute top-0 right-0 h-full w-full max-w-md bg-[var(--panel-bg)] backdrop-blur-sm shadow-2xl z-50 border-l border-[var(--panel-border)] flex flex-col"
+                className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-[var(--panel-border)] bg-[var(--panel-bg)]/95 shadow-2xl backdrop-blur-xl sm:w-[min(920px,calc(100vw-2rem))]"
             >
-                <div className="flex-shrink-0 p-4 sm:p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 id="settings-title" className="text-2xl font-bold text-[var(--title-color)]">Settings</h2>
-                        <Button aria-label="Close settings" onClick={() => setShowSettings(false)} style={{backgroundColor: '#dc2626'}}>
+                <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--panel-border)] px-4 py-4 sm:px-6">
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[var(--text-muted)]">Control center</p>
+                        <div className="mt-1 flex items-center gap-3">
+                            <h2 id="settings-title" className="text-2xl font-black text-[var(--title-color)]">Settings</h2>
+                            <span className={`hidden rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider sm:inline-flex ${drawing ? 'border-amber-400/40 bg-amber-400/10 text-amber-300' : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'}`}>{drawing ? 'Draw in progress' : 'Changes save automatically'}</span>
+                        </div>
+                    </div>
+                    <Button aria-label="Close settings" onClick={() => setShowSettings(false)} className="!rounded-full !bg-[var(--input-bg)] !p-2.5 hover:!opacity-80">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </Button>
-                    </div>
-                    <div role="group" aria-label="Settings sections" className="grid grid-cols-5 border-b border-[var(--panel-border)] mb-4 text-[11px] sm:text-sm">
-                        <button type="button" aria-pressed={settingsTab === 'main'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'main' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('main')}>Main</button>
-                        <button type="button" aria-pressed={settingsTab === 'sound'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'sound' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('sound')}>Sound</button>
-                        <button type="button" aria-pressed={settingsTab === 'public'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'public' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('public')}>Public</button>
-                        <button type="button" aria-pressed={settingsTab === 'templates'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'templates' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('templates')}>Presets</button>
-                        <button type="button" aria-pressed={settingsTab === 'about'} className={`py-2 px-1 sm:px-2 ${settingsTab === 'about' ? 'border-b-2 border-[var(--title-color)] text-[var(--title-color)]' : 'text-[var(--text-muted)]'}`} onClick={() => setSettingsTab('about')}>About</button>
-                    </div>
-                </div>
-                
-                <div className="flex-grow overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">
-                    {settingsTab === 'main' && (
+                    </Button>
+                </header>
+
+                <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+                    <nav aria-label="Settings sections" className="flex shrink-0 gap-2 overflow-x-auto border-b border-[var(--panel-border)] p-3 sm:w-52 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r sm:p-4">
+                        {SETTINGS_SECTIONS.map((section) => (
+                            <button
+                              key={section.id}
+                              type="button"
+                              aria-current={settingsTab === section.id ? 'page' : undefined}
+                              className={`group flex min-w-[140px] items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all sm:min-w-0 ${settingsTab === section.id ? 'border-[var(--button-action-bg)] bg-[var(--button-action-bg)]/15 text-[var(--title-color)] shadow-lg' : 'border-transparent text-[var(--text-muted)] hover:border-[var(--panel-border)] hover:bg-[var(--input-bg)]/40 hover:text-[var(--text-color)]'}`}
+                              onClick={() => setSettingsTab(section.id)}
+                            >
+                                <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-lg font-black ${settingsTab === section.id ? 'bg-[var(--button-action-bg)] text-slate-950' : 'bg-[var(--input-bg)]'}`}>{section.icon}</span>
+                                <span className="min-w-0"><span className="block text-sm font-bold">{section.label}</span><span className="hidden truncate text-[10px] opacity-70 sm:block">{section.description}</span></span>
+                            </button>
+                        ))}
+                    </nav>
+
+                    <div className="flex-grow overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
+                        <div className="mb-6 rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/30 p-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--text-muted)]">{activeSettingsSection.label}</p>
+                            <h3 className="mt-1 text-xl font-black text-[var(--text-color)]">{activeSettingsSection.description}</h3>
+                        </div>
+                    {settingsTab === 'event' && (
                         <div className="space-y-6">
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Theme</label>
@@ -1571,8 +1714,13 @@ export default function HostView() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="pt-2 border-t border-[var(--panel-border)]">
-                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Participants & Draw Mode</p>
+                        </div>
+                    )}
+                    {settingsTab === 'draw' && (
+                        <div className="space-y-6">
+                            <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/25 p-4">
+                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Participants & Draw Mode</p>
+                                <p className="mt-1 text-xs text-[var(--text-muted)]">Build the eligible pool, choose how winners are selected, and configure fairness before going live.</p>
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Participant Type</label>
@@ -1701,8 +1849,12 @@ export default function HostView() {
                                     <Input id="winners-per-prize" type="number" value={winnersPerPrize} onChange={(e) => setWinnersPerPrize(Math.max(1, parseInt(e.target.value, 10) || 1))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} min="1" />
                                 </div>
                             </div>
+                        </div>
+                    )}
+                    {settingsTab === 'event' && (
+                        <div className="mt-6 space-y-6">
                             <div className="pt-2 border-t border-[var(--panel-border)]">
-                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Branding & Media</p>
+                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Branding, Media & Session</p>
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Custom Background</label>
@@ -1730,27 +1882,28 @@ export default function HostView() {
                     )}
                     {settingsTab === 'sound' && (
                         <div className="space-y-6">
-                            <div className="flex items-center justify-between">
-                                <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Volume Controls</p>
+                            <div className="flex items-center justify-between rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/25 p-4">
+                                <div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Volume Controls</p><p className="mt-1 text-xs text-[var(--text-muted)]">Balance the draw cues and celebration layers independently.</p></div>
                                 <button onClick={resetAudioSettings} className="text-xs px-2 py-1 rounded bg-[var(--input-bg)] border border-[var(--panel-border)] hover:opacity-80">Reset defaults</button>
                             </div>
-                            <div>
+                            <div className="rounded-xl border border-[var(--panel-border)] bg-black/5 p-4">
                                 <label className="font-semibold text-sm mb-1 block">Master Volume ({masterVolume} dB)</label>
                                 <input type="range" min="-40" max="6" step="1" value={masterVolume} onChange={e => setMasterVolume(Number(e.target.value))} className="w-full" />
                             </div>
-                            <div>
+                            <div className="rounded-xl border border-[var(--panel-border)] bg-black/5 p-4">
                                 <label className="font-semibold text-sm mb-1 block">Sound Effects Volume ({sfxVolume} dB)</label>
                                 <input type="range" min="-40" max="6" step="1" value={sfxVolume} onChange={e => setSfxVolume(Number(e.target.value))} className="w-full" />
                             </div>
-                            <div>
+                            <div className="rounded-xl border border-[var(--panel-border)] bg-black/5 p-4">
                                 <label className="font-semibold text-sm mb-1 block">Celebration Volume ({musicVolume} dB)</label>
                                 <input type="range" min="-40" max="6" step="1" value={musicVolume} onChange={e => setMusicVolume(Number(e.target.value))} className="w-full" />
                             </div>
-                            <div className="pt-4 border-t border-[var(--panel-border)]">
-                                <h3 className="text-lg font-bold text-[var(--text-color)] mb-2">Soundboard</h3>
+                            <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/25 p-4">
+                                <h3 className="text-lg font-bold text-[var(--text-color)] mb-1">Cue Preview</h3>
+                                <p className="mb-3 text-xs text-[var(--text-muted)]">Preview the regular-prize build and layered Magnific celebration.</p>
                                 <div className="grid grid-cols-2 gap-4">
                                     <Button onClick={playDrumroll} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Drumroll</Button>
-                                    <Button onClick={playCelebration} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Whistle + Applause + Wow</Button>
+                                    <Button onClick={playCelebration} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Prize Fanfare</Button>
                                 </div>
                             </div>
                         </div>
@@ -1790,6 +1943,33 @@ export default function HostView() {
                                 <Button onClick={handleCopyPublicViewUrl} className="w-full !bg-blue-600 hover:!bg-blue-700">Copy Link</Button>
                                 <a href={publicViewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg px-4 py-2 font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors">Open View</a>
                             </div>
+                            <section className="space-y-4 rounded-2xl border border-yellow-400/25 bg-yellow-400/[.06] p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div><p className="text-xs font-black uppercase tracking-[.18em] text-yellow-300">MC remote control</p><h4 className="mt-1 font-bold text-[var(--text-color)]">Start draws from a phone or tablet</h4></div>
+                                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${remoteListener.status === 'listening' ? 'bg-emerald-500/20 text-emerald-300' : remoteListener.status === 'error' ? 'bg-red-500/20 text-red-300' : 'bg-white/10 text-[var(--text-muted)]'}`}>{REMOTE_LISTENER_LABELS[remoteListener.status] || remoteListener.status}</span>
+                                </div>
+                                <p className="text-xs leading-relaxed text-[var(--text-muted)]">This is a private bearer link for the MC. It can request the next draw but cannot see participant lists or choose a winner.</p>
+                                {!liveRoom ? (
+                                    <p className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-xs text-amber-200">Start a cross-device room before enabling remote control.</p>
+                                ) : remoteControlUrl ? (
+                                    <>
+                                        <div>
+                                            <label htmlFor="remote-control-url" className="mb-1 block text-xs font-semibold">Private remote link</label>
+                                            <Input id="remote-control-url" type="password" readOnly autoComplete="off" value={remoteControlUrl} onFocus={(event) => event.target.select()} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)] text-xs" />
+                                        </div>
+                                        {remoteListener.errorMessage && <p role="alert" className="rounded-lg bg-red-500/10 p-2 text-xs text-red-300">{remoteListener.errorMessage}. Run the latest <code>supabase/schema.sql</code> if the remote functions are missing.</p>}
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Button onClick={handleCopyRemoteControlUrl} disabled={roomActionPending} className="!bg-yellow-500 !text-slate-950 hover:!bg-yellow-400">Copy Remote</Button>
+                                            <a href={remoteControlUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600">Open Remote</a>
+                                            <Button onClick={() => enableRemoteControl({ rotated: true })} disabled={drawing || roomActionPending} className="!bg-indigo-600 hover:!bg-indigo-500">Rotate Link</Button>
+                                            <Button onClick={disableRemoteControl} disabled={drawing || roomActionPending} className="!bg-red-700 hover:!bg-red-600">Disable</Button>
+                                        </div>
+                                        <p className="text-[11px] text-amber-200/80">If this link is exposed, rotate it immediately. The previous link will stop working.</p>
+                                    </>
+                                ) : (
+                                    <Button onClick={() => enableRemoteControl()} disabled={drawing || roomActionPending} className="w-full !bg-yellow-500 !text-slate-950 hover:!bg-yellow-400">Enable Secure MC Remote</Button>
+                                )}
+                            </section>
                             {liveRoom && (
                                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[var(--panel-border)]">
                                     <Button onClick={() => stopLiveRoom({ startAnother: true })} disabled={drawing || roomActionPending} className="w-full !bg-amber-600 hover:!bg-amber-700">New Room</Button>
@@ -1815,13 +1995,13 @@ export default function HostView() {
                         </div>
                     )}
                     {settingsTab === 'about' && (
-                        <div className="space-y-4 text-[var(--text-muted)]">
-                            <h3 className="text-xl font-bold text-[var(--text-color)]">Lucky Draw Pro</h3>
-                            <p>Version 2.0.0</p>
+                        <div className="space-y-4 rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/25 p-5 text-[var(--text-muted)]">
+                            <div className="flex items-center justify-between gap-4"><h3 className="text-xl font-bold text-[var(--text-color)]">Lucky Draw Pro</h3><span className="rounded-full border border-[var(--panel-border)] px-3 py-1 text-xs font-bold">v2.0.0</span></div>
                             <p>A fully customizable application for running exciting live lucky draws for any event. This tool is designed for reliability and high audience engagement.</p>
                             <p className="pt-4">Created by: <span className="font-bold text-[var(--text-color)]">Tao Mon Lae</span></p>
                         </div>
                     )}
+                </div>
                 </div>
             </motion.div>
             </>
@@ -1946,7 +2126,7 @@ export default function HostView() {
       
       {!historyPanelOpen && (
         <button
-          onClick={() => setHistoryPanelOpen(true)}
+          onClick={() => { setShowSettings(false); setHistoryPanelOpen(true); }}
           className="fixed left-0 sm:left-3 top-28 z-20 flex flex-col items-center justify-center gap-1 w-8 sm:w-auto px-1 sm:px-2 py-3 rounded-r-lg sm:rounded-lg shadow-lg text-xs font-bold"
           style={{ backgroundColor: 'var(--panel-bg)', color: 'var(--title-color)', border: '1px solid var(--panel-border)' }}
           title="Show History & Audit"
@@ -1959,6 +2139,7 @@ export default function HostView() {
       )}
 
       <aside
+        ref={historyPanelRef}
         aria-hidden={!historyPanelOpen}
         inert={!historyPanelOpen}
         className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform duration-300 ${historyPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}

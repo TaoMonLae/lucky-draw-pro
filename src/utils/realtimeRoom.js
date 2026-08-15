@@ -92,6 +92,7 @@ export function toPublicDrawState(appState) {
         : '',
       grandFinalePhase: PUBLIC_FINALE_PHASES.includes(appState.grandFinalePhase) ? appState.grandFinalePhase : 'idle',
       showConfetti: Boolean(appState.showConfetti),
+      remoteControlReady: Boolean(appState.remoteControlReady),
       completedPrizeCount: Math.max(0, Math.round(safeNumber(appState.completedPrizeCount, 0))),
       prizeCount: Math.max(0, Math.round(safeNumber(appState.prizeCount, 0))),
       totalEntries: Math.max(0, Math.round(safeNumber(appState.totalEntries, 0))),
@@ -118,6 +119,7 @@ export function isValidPublicDrawState(value) {
     if (typeof value.backgroundImage !== 'string') return false;
     if (!value.live || typeof value.live !== 'object') return false;
     if (typeof value.live.drawing !== 'boolean' || typeof value.live.showConfetti !== 'boolean') return false;
+    if (value.live.remoteControlReady !== undefined && typeof value.live.remoteControlReady !== 'boolean') return false;
     if (typeof value.live.currentPrize !== 'string' || typeof value.live.displayValue !== 'string') return false;
     if (!PUBLIC_FINALE_PHASES.includes(value.live.grandFinalePhase)) return false;
     for (const field of ['completedPrizeCount', 'prizeCount', 'totalEntries', 'remainingEntriesCount']) {

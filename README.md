@@ -73,10 +73,16 @@ For another tab in the same browser profile, open **Settings → Public View** a
 
 For phones, tablets, projectors, and other computers, configure Supabase and select **Start Cross-Device Room**. Share the generated room link; the current draw animation, prize name, event styling, progress, winner history, grand-prize finale, and team or role results will update live. **Stop Sharing** closes the room and removes its public state.
 
+### Secure MC Remote
+
+After starting a cross-device room, open **Settings → Audience → MC Remote Control** and select **Enable Secure MC Remote**. Copy the private remote link to the event host or MC's phone or tablet. The remote can request the next draw while the host computer performs the actual eligibility checks, winner selection, animation, and audio.
+
+The remote link contains a bearer credential in its URL fragment. Do not share it with the audience. Use **Rotate Link** immediately if it is exposed; the previous link will stop working. **Disable** revokes remote access without closing the audience display.
+
 ## Supabase Cross-Device Setup
 
 1. Create a Supabase project.
-2. Open the project’s SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql).
+2. Open the project’s SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql). Rerun the complete file after app upgrades so the latest remote-control functions are installed.
 3. Copy `.env.example` to `.env.local` and fill in the project URL and publishable key:
 
 ```bash
@@ -134,7 +140,7 @@ supabase/
 
 ## Data and Privacy
 
-Session autosaves, full participant lists, audit logs, and exports stay in the host browser. When cross-device sharing is enabled, Supabase receives only public event styling, a size-limited logo and background, transient draw-display values and progress counts, public winner history, and public team/role results. Participant lists and audit logs are never published. Room write credentials remain in the host browser, and rooms expire automatically after seven days.
+Session autosaves, full participant lists, audit logs, and exports stay in the host browser. When cross-device sharing is enabled, Supabase receives only public event styling, a size-limited logo and background, transient draw-display values and progress counts, public winner history, public team/role results, and short-lived remote draw requests. Participant lists and audit logs are never published. Room write credentials remain in the host browser; MC remote credentials are stored only as hashes in Supabase, requests are rate-limited, and rooms expire automatically after seven days.
 
 ## Audio Sources
 
