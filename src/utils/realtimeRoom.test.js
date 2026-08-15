@@ -100,6 +100,10 @@ describe('public realtime state', () => {
       remainingEntriesCount: 98,
     });
     expect(isValidPublicDrawState(publicState)).toBe(true);
+    expect(isValidPublicDrawState({
+      ...publicState,
+      live: { ...publicState.live, grandFinalePhase: 'carousel' },
+    })).toBe(true);
   });
 
   test('continues accepting legacy public snapshots', () => {

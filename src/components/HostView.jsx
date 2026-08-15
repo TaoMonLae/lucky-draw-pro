@@ -29,6 +29,7 @@ import { buildRemoteControlUrl, clearRemoteControlCredentials, createRemoteContr
 import { getTypographyProps } from '../utils/typography';
 import LetterGlitch from './LetterGlitch';
 import GrandFinale from './GrandFinale';
+import WinnerCarousel from './WinnerCarousel';
 
 const DISPLAY_DEFAULTS = {
   titleFont: 'sans-serif',
@@ -1318,7 +1319,7 @@ export default function HostView() {
       playGrandFinaleReveal();
       finaleTimeoutRef.current = setTimeout(() => {
         setShowConfetti(false);
-        setGrandFinalePhase('idle');
+        setGrandFinalePhase('carousel');
       }, 9000);
     } else {
       playCelebration();
@@ -1346,6 +1347,10 @@ export default function HostView() {
         setHistoryPanelOpen(false);
         return;
       }
+      if (event.key === 'Escape' && grandFinalePhase === 'carousel') {
+        setGrandFinalePhase('idle');
+        return;
+      }
       if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
       if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') {
         event.preventDefault();
@@ -1366,7 +1371,7 @@ export default function HostView() {
 
     window.addEventListener('keydown', handleShortcuts);
     return () => window.removeEventListener('keydown', handleShortcuts);
-  }, [historyPanelOpen, showSettings]);
+  }, [grandFinalePhase, historyPanelOpen, showSettings]);
 
   useEffect(() => {
     if (winnerToExport && exportRef.current) {
@@ -1513,6 +1518,17 @@ export default function HostView() {
           <motion.div key="grand-finale" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="contents">
             <GrandFinale phase={grandFinalePhase} />
           </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {grandFinalePhase === 'carousel' && (
+          <WinnerCarousel
+            winnersHistory={winnersHistory}
+            title={title}
+            titleFont={titleFont}
+            displayFont={displayFont}
+            onClose={() => setGrandFinalePhase('idle')}
+          />
         )}
       </AnimatePresence>
       <AnimatePresence>

@@ -3,7 +3,7 @@ import { isValidSessionData } from './validation';
 export const LIVE_ROOM_STORAGE_KEY = 'lucky-draw-live-room';
 export const MAX_PUBLIC_STATE_CHARS = 750_000;
 const PUBLIC_THEMES = ['Event Night', 'Corporate Blue', 'Carnival Red', 'Neon Party'];
-const PUBLIC_FINALE_PHASES = ['idle', 'build', 'reveal'];
+const PUBLIC_FINALE_PHASES = ['idle', 'build', 'reveal', 'carousel'];
 
 export function createRoomCredentials(cryptoApi = window.crypto) {
   const secureUuid = () => {

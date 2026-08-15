@@ -7,6 +7,7 @@ import { getPaddedDigits } from '../hooks/useDrawEngine';
 import { ConfettiParticle } from './ui';
 import LetterGlitch from './LetterGlitch';
 import GrandFinale from './GrandFinale';
+import WinnerCarousel from './WinnerCarousel';
 
 const SYNC_LABELS = {
   connecting: 'Connecting',
@@ -142,6 +143,16 @@ export default function PublicView({ roomId = '' }) {
       )}
       {!showLetterGlitch && !backgroundImage && <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_15%,rgba(255,255,255,0.13),transparent_35%),radial-gradient(circle_at_20%_85%,rgba(6,182,212,0.12),transparent_40%)]" />}
       <AnimatePresence>{isGrandFinaleActive && <GrandFinale phase={live.grandFinalePhase} />}</AnimatePresence>
+      <AnimatePresence>
+        {live.grandFinalePhase === 'carousel' && (
+          <WinnerCarousel
+            winnersHistory={winnersHistory}
+            title={title}
+            titleFont={titleFont}
+            displayFont={displayFont}
+          />
+        )}
+      </AnimatePresence>
       {live.showConfetti && Array.from({ length: isGrandFinaleReveal ? 160 : 80 }).map((_, index) => (
         <ConfettiParticle key={`${live.completedPrizeCount}-${live.grandFinalePhase}-${index}`} colors={currentTheme['--confetti-colors']} grand={isGrandFinaleReveal} />
       ))}

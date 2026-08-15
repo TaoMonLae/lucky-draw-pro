@@ -73,6 +73,8 @@ For another tab in the same browser profile, open **Settings → Public View** a
 
 For phones, tablets, projectors, and other computers, configure Supabase and select **Start Cross-Device Room**. Share the generated room link; the current draw animation, prize name, event styling, progress, winner history, grand-prize finale, and team or role results will update live. **Stop Sharing** closes the room and removes its public state.
 
+After the final grand-prize reveal, the host and public display automatically transition into an **All Winners** carousel. Every winning entry is presented with its prize in draw order. The host can select **Finish Celebration** or press `Escape` to return to the main draw screen.
+
 ### Secure MC Remote
 
 After starting a cross-device room, open **Settings → Audience → MC Remote Control** and select **Enable Secure MC Remote**. Copy the private remote link to the event host or MC's phone or tablet. The remote can request the next draw while the host computer performs the actual eligibility checks, winner selection, animation, and audio.
