@@ -1,5 +1,19 @@
 export const REMOTE_CONTROL_STORAGE_KEY = 'lucky-draw-remote-control';
 
+export function isHostReadyForRemoteDraw({
+  drawing = false,
+  isCharging = false,
+  remainingEntriesCount = 0,
+  operationMode = 'standard',
+  completedPrizeCount = 0,
+  prizeCount = 0,
+} = {}) {
+  return !drawing
+    && !isCharging
+    && remainingEntriesCount > 0
+    && (operationMode !== 'standard' || completedPrizeCount < prizeCount);
+}
+
 function secureUuid(cryptoApi) {
   if (typeof cryptoApi?.randomUUID === 'function') return cryptoApi.randomUUID();
   if (typeof cryptoApi?.getRandomValues !== 'function') return '';

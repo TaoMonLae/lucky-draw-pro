@@ -4,6 +4,7 @@ import {
   clearRemoteControlCredentials,
   createRemoteControlCredentials,
   getRemoteControlCredentials,
+  isHostReadyForRemoteDraw,
   isValidRemoteControlCredentials,
   loadRemoteControlCredentials,
   saveRemoteControlCredentials,
@@ -54,5 +55,24 @@ describe('remote control credentials', () => {
     expect(getRemoteControlCredentials('https://draw.example.test/?view=remote&room=bad#key=short')).toBeNull();
     expect(isValidRemoteControlCredentials({ roomId, remoteKey: 'short' })).toBe(false);
     expect(buildRemoteControlUrl('https://draw.example.test/', null)).toBe('');
+  });
+
+  test('allows the MC remote while host settings are open', () => {
+    expect(isHostReadyForRemoteDraw({
+      drawing: false,
+      isCharging: false,
+      remainingEntriesCount: 50,
+      operationMode: 'standard',
+      completedPrizeCount: 0,
+      prizeCount: 5,
+      showSettings: true,
+    })).toBe(true);
+  });
+
+  test('blocks remote draws during active or completed draws', () => {
+    expect(isHostReadyForRemoteDraw({ drawing: true, remainingEntriesCount: 50, prizeCount: 5 })).toBe(false);
+    expect(isHostReadyForRemoteDraw({ isCharging: true, remainingEntriesCount: 50, prizeCount: 5 })).toBe(false);
+    expect(isHostReadyForRemoteDraw({ remainingEntriesCount: 0, prizeCount: 5 })).toBe(false);
+    expect(isHostReadyForRemoteDraw({ remainingEntriesCount: 50, completedPrizeCount: 5, prizeCount: 5 })).toBe(false);
   });
 });

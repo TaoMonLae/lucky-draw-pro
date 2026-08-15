@@ -56,8 +56,10 @@ export default function RemoteControlView({ credentials }) {
     if (syncStatus !== 'live') return { label: 'Host unavailable', color: 'bg-red-400' };
     if (live?.drawing) return { label: 'Draw in progress', color: 'bg-amber-300' };
     if (drawComplete) return { label: 'Event completed', color: 'bg-cyan-300' };
+    if (live?.remainingEntriesCount <= 0) return { label: 'No eligible entries', color: 'bg-red-400' };
+    if (live?.remoteControlReady !== true) return { label: 'Host not ready', color: 'bg-amber-300' };
     return { label: 'Secure control ready', color: 'bg-emerald-400' };
-  }, [credentialsValid, drawComplete, live?.drawing, syncStatus]);
+  }, [credentialsValid, drawComplete, live?.drawing, live?.remainingEntriesCount, live?.remoteControlReady, syncStatus]);
 
   const requestDraw = async () => {
     if (!canDraw) return;

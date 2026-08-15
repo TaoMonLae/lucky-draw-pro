@@ -144,7 +144,7 @@ Session autosaves, full participant lists, audit logs, and exports stay in the h
 
 ## Audio Sources
 
-The bundled impact and audience effects come from Magnific's stock sound-effects catalog: [Stomp and Achieve](https://www.magnific.com/audio/sound-effects/stomp-and-achieve/68) and [Crowd cheering and applauding](https://www.magnific.com/audio/sound-effects/crowd-cheering-and-applauding/197). Synthesized effects remain as a fallback when an audio asset cannot load.
+The bundled reveal, impact, and audience effects come from Magnific's stock sound-effects catalog: [Reversed Cymbal Swell Into Impact](https://www.magnific.com/audio/sound-effects/reversed-cymbal-swell-into-impact/5341), [Stomp and Achieve](https://www.magnific.com/audio/sound-effects/stomp-and-achieve/68), and [Crowd cheering and applauding](https://www.magnific.com/audio/sound-effects/crowd-cheering-and-applauding/197). Synthesized effects remain as a fallback when an audio asset cannot load.
 
 ## Developer
 
