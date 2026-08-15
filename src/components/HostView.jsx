@@ -30,6 +30,7 @@ import { getTypographyProps } from '../utils/typography';
 import LetterGlitch from './LetterGlitch';
 import GrandFinale from './GrandFinale';
 import WinnerCarousel from './WinnerCarousel';
+import AboutPanel from './AboutPanel';
 
 const DISPLAY_DEFAULTS = {
   titleFont: 'sans-serif',
@@ -1527,6 +1528,8 @@ export default function HostView() {
             title={title}
             titleFont={titleFont}
             displayFont={displayFont}
+            logo={logo}
+            backgroundImage={backgroundImage}
             onClose={() => setGrandFinalePhase('idle')}
           />
         )}
@@ -2012,11 +2015,7 @@ export default function HostView() {
                         </div>
                     )}
                     {settingsTab === 'about' && (
-                        <div className="space-y-4 rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/25 p-5 text-[var(--text-muted)]">
-                            <div className="flex items-center justify-between gap-4"><h3 className="text-xl font-bold text-[var(--text-color)]">Lucky Draw Pro</h3><span className="rounded-full border border-[var(--panel-border)] px-3 py-1 text-xs font-bold">v2.0.0</span></div>
-                            <p>A fully customizable application for running exciting live lucky draws for any event. This tool is designed for reliability and high audience engagement.</p>
-                            <p className="pt-4">Created by: <span className="font-bold text-[var(--text-color)]">Tao Mon Lae</span></p>
-                        </div>
+                        <AboutPanel />
                     )}
                 </div>
                 </div>

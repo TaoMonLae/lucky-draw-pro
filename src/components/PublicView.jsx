@@ -150,6 +150,8 @@ export default function PublicView({ roomId = '' }) {
             title={title}
             titleFont={titleFont}
             displayFont={displayFont}
+            logo={logo}
+            backgroundImage={backgroundImage}
           />
         )}
       </AnimatePresence>
