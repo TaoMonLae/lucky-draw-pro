@@ -144,7 +144,7 @@ Session autosaves, full participant lists, audit logs, and exports stay in the h
 
 ## Audio Sources
 
-The bundled reveal and audience effects come from Magnific's stock sound-effects catalog: [Reversed Cymbal Swell Into Impact](https://www.magnific.com/audio/sound-effects/reversed-cymbal-swell-into-impact/5341) and [Crowd cheering and applauding](https://www.magnific.com/audio/sound-effects/crowd-cheering-and-applauding/197). Crowd audio is filtered and volume-controlled to soften shrill whistles; non-melodic synthesized impact and applause remain as loading fallbacks.
+The bundled reveal effect comes from Magnific's stock sound-effects catalog: [Reversed Cymbal Swell Into Impact](https://www.magnific.com/audio/sound-effects/reversed-cymbal-swell-into-impact/5341). The applause was custom-created with the [Magnific Sound Effect Generator](https://www.magnific.com/app/soundfx-generator/) using an applause-only prompt that excludes voices, whistles, birds, music, and tonal calls. Non-melodic synthesized impact and applause remain as loading fallbacks.
 
 ## Developer
 

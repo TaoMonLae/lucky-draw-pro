@@ -51,8 +51,8 @@ const AUDIO_DEFAULTS = { masterVolume: 0, sfxVolume: -6, musicVolume: 0 };
 const MAX_EMBEDDED_IMAGE_CHARS = 4_000_000;
 const LETTER_GLITCH_COLORS = ['#123044', '#06b6d4', '#facc15'];
 const MAGNIFIC_AUDIO = {
+  applauseOnly: `${process.env.PUBLIC_URL || ''}/audio/magnific-applause-only.mp3`,
   cinematicReveal: `${process.env.PUBLIC_URL || ''}/audio/magnific-cinematic-reveal.mp3`,
-  crowdCheer: `${process.env.PUBLIC_URL || ''}/audio/magnific-crowd-cheer.mp3`,
 };
 const LIVE_SYNC_LABELS = {
   unconfigured: 'Setup required',
@@ -177,15 +177,15 @@ export default function HostView() {
   const almostTriggered = useRef(false);
   const sfxVolumeNode = useRef(null);
   const musicVolumeNode = useRef(null);
-  const crowdFilterNode = useRef(null);
+  const applauseFilterNode = useRef(null);
   const tickSynth = useRef(null);
   const drumrollSynth = useRef(null);
   const applauseSynth = useRef(null);
   const grandRiserSynth = useRef(null);
   const grandImpactSynth = useRef(null);
   const regularRiserSynth = useRef(null);
+  const magnificApplausePlayer = useRef(null);
   const magnificRevealPlayer = useRef(null);
-  const magnificCrowdPlayer = useRef(null);
 
   const appState = useMemo(() => ({
     initialEntries, remainingEntries, winnersHistory,
@@ -361,7 +361,7 @@ export default function HostView() {
 
     sfxVolumeNode.current = new Tone.Volume(0).toDestination();
     musicVolumeNode.current = new Tone.Volume(0).toDestination();
-    crowdFilterNode.current = new Tone.Filter({ frequency: 5200, type: 'lowpass', rolloff: -24 }).connect(musicVolumeNode.current);
+    applauseFilterNode.current = new Tone.Filter({ frequency: 7200, type: 'lowpass', rolloff: -12 }).connect(musicVolumeNode.current);
 
     tickSynth.current = new Tone.MembraneSynth().connect(sfxVolumeNode.current);
     drumrollSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.015, octaves: 3, envelope: { attack: 0.001, decay: 0.16, sustain: 0 } }).connect(sfxVolumeNode.current);
@@ -369,21 +369,21 @@ export default function HostView() {
     regularRiserSynth.current = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 1.5, decay: 1, sustain: 0.03, release: 0.25 } }).connect(sfxVolumeNode.current);
     grandRiserSynth.current = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 3.5, decay: 4.5, sustain: 0.08, release: 0.6 } }).connect(sfxVolumeNode.current);
     grandImpactSynth.current = new Tone.MembraneSynth({ pitchDecay: 0.12, octaves: 8, envelope: { attack: 0.001, decay: 1.8, sustain: 0, release: 0.2 } }).connect(sfxVolumeNode.current);
+    magnificApplausePlayer.current = new Tone.Player({ url: MAGNIFIC_AUDIO.applauseOnly, fadeIn: 0.04, fadeOut: 0.5 }).connect(applauseFilterNode.current);
     magnificRevealPlayer.current = new Tone.Player({ url: MAGNIFIC_AUDIO.cinematicReveal, fadeIn: 0.01, fadeOut: 0.12 }).connect(sfxVolumeNode.current);
-    magnificCrowdPlayer.current = new Tone.Player({ url: MAGNIFIC_AUDIO.crowdCheer, fadeIn: 0.04, fadeOut: 0.45 }).connect(crowdFilterNode.current);
 
     regularRiserSynth.current.volume.value = -20;
     grandRiserSynth.current.volume.value = -15;
     grandImpactSynth.current.volume.value = -3;
+    magnificApplausePlayer.current.volume.value = -8;
     magnificRevealPlayer.current.volume.value = -4;
-    magnificCrowdPlayer.current.volume.value = -11;
 
     return () => {
-      [tickSynth, drumrollSynth, applauseSynth, regularRiserSynth, grandRiserSynth, grandImpactSynth, magnificRevealPlayer, magnificCrowdPlayer].forEach((ref) => {
+      [tickSynth, drumrollSynth, applauseSynth, regularRiserSynth, grandRiserSynth, grandImpactSynth, magnificApplausePlayer, magnificRevealPlayer].forEach((ref) => {
         ref.current?.dispose();
         ref.current = null;
       });
-      [crowdFilterNode, sfxVolumeNode, musicVolumeNode].forEach((ref) => {
+      [applauseFilterNode, sfxVolumeNode, musicVolumeNode].forEach((ref) => {
         ref.current?.dispose();
         ref.current = null;
       });
@@ -941,7 +941,7 @@ export default function HostView() {
 
   const stopCelebrationAudio = () => {
     const now = Tone.now();
-    [magnificRevealPlayer, magnificCrowdPlayer].forEach((playerRef) => {
+    [magnificRevealPlayer, magnificApplausePlayer].forEach((playerRef) => {
       try {
         if (playerRef.current?.state === 'started') playerRef.current.stop(now);
       } catch (error) {
@@ -975,12 +975,12 @@ export default function HostView() {
   const playCelebration = () => {
     const now = Tone.now();
     const hasCinematicReveal = playMagnificPlayer(magnificRevealPlayer, now, 2.05);
-    const hasCrowd = playMagnificPlayer(magnificCrowdPlayer, now + 0.12, 3.8);
+    const hasApplause = playMagnificPlayer(magnificApplausePlayer, now + 0.12, 4.5);
 
     if (!hasCinematicReveal) {
       grandImpactSynth.current?.triggerAttackRelease('C1', '8n', now);
     }
-    if (!hasCrowd) playApplause();
+    if (!hasApplause) playApplause();
   };
 
   const playGrandFinaleBuild = (buildDurationMs = GRAND_FINALE_DRAW_DURATION_MS) => {
@@ -1005,9 +1005,9 @@ export default function HostView() {
   const playGrandFinaleReveal = () => {
     const now = Tone.now();
     playMagnificPlayer(magnificRevealPlayer, now, 2.05);
-    const hasCrowd = playMagnificPlayer(magnificCrowdPlayer, now + 0.1, 7);
+    const hasApplause = playMagnificPlayer(magnificApplausePlayer, now + 0.1, 9.8);
     grandImpactSynth.current?.triggerAttackRelease('C1', '1n', now);
-    if (!hasCrowd) playApplause();
+    if (!hasApplause) playApplause();
   };
 
   const ensureAudioStarted = async () => {
