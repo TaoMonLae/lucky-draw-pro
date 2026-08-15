@@ -1505,9 +1505,9 @@ export default function HostView() {
   const activeSettingsSection = SETTINGS_SECTIONS.find((section) => section.id === settingsTab) || SETTINGS_SECTIONS[0];
 
   return (
-    <div style={mainStyle} className="relative flex flex-col items-center justify-center min-h-screen text-[var(--text-color)] p-4 pb-20 sm:pb-4 gap-3 sm:gap-6 font-sans overflow-hidden transition-all duration-500 bg-[var(--bg-color)]">
+    <div style={mainStyle} className="app-viewport relative flex flex-col items-center justify-center text-[var(--text-color)] p-4 pb-20 sm:pb-4 gap-3 sm:gap-6 font-sans overflow-hidden transition-all duration-500 bg-[var(--bg-color)]">
       {showLetterGlitch && (
-        <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="pointer-events-none fixed inset-0 z-0">
           <LetterGlitch
             glitchColors={LETTER_GLITCH_COLORS}
             glitchSpeed={50}

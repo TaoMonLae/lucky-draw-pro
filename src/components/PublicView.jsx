@@ -27,7 +27,7 @@ function ShapedText({ as: Tag = 'span', children, fontFamily, className, style }
 
 function WaitingStage({ errorMessage, roomId, syncStatus }) {
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 p-6 text-center text-white">
+    <div className="app-viewport relative flex items-center justify-center overflow-hidden bg-slate-950 p-6 text-center text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(6,182,212,0.2),transparent_38%),radial-gradient(circle_at_50%_100%,rgba(250,204,21,0.12),transparent_45%)]" />
       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} className="relative max-w-xl rounded-[2rem] border border-white/10 bg-white/5 px-8 py-12 shadow-2xl backdrop-blur-xl">
         <motion.div animate={{ scale: [1, 1.08, 1], opacity: [0.55, 1, 0.55] }} transition={{ duration: 2, repeat: Infinity }} className="mx-auto mb-6 h-4 w-4 rounded-full bg-cyan-400 shadow-[0_0_30px_8px_rgba(34,211,238,0.55)]" />
@@ -134,9 +134,9 @@ export default function PublicView({ roomId = '' }) {
   };
 
   return (
-    <main style={mainStyle} className="relative min-h-screen overflow-hidden bg-[var(--bg-color)] p-4 text-[var(--text-color)] sm:p-6 lg:p-8">
+    <main style={mainStyle} className="app-viewport relative overflow-hidden bg-[var(--bg-color)] p-4 text-[var(--text-color)] sm:p-6 lg:p-8">
       {showLetterGlitch && (
-        <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="pointer-events-none fixed inset-0 z-0">
           <LetterGlitch glitchColors={LETTER_GLITCH_COLORS} glitchSpeed={70} centerVignette outerVignette={false} smooth />
           <div className="absolute inset-0 bg-black/65" />
         </div>
@@ -159,7 +159,7 @@ export default function PublicView({ roomId = '' }) {
         <ConfettiParticle key={`${live.completedPrizeCount}-${live.grandFinalePhase}-${index}`} colors={currentTheme['--confetti-colors']} grand={isGrandFinaleReveal} />
       ))}
 
-      <div className="relative z-20 mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1500px] flex-col">
+      <div className="relative z-20 mx-auto flex min-h-[calc(100dvh-2rem)] max-w-[1500px] flex-col">
         <header className="flex items-start justify-between gap-4 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/80 p-4 shadow-2xl backdrop-blur-xl sm:items-center sm:px-6">
           <div className="flex min-w-0 items-center gap-3 sm:gap-5">
             {logo && <img src={logo} alt="Event Logo" className="h-12 w-auto max-w-24 object-contain sm:h-16 sm:max-w-40" />}
@@ -222,7 +222,7 @@ export default function PublicView({ roomId = '' }) {
             </div>
           </section>
 
-          <aside className="flex min-h-0 flex-col rounded-[2rem] border border-[var(--panel-border)] bg-[var(--panel-bg)]/78 p-5 shadow-2xl backdrop-blur-xl lg:max-h-[calc(100vh-10.5rem)]">
+          <aside className="flex min-h-0 flex-col rounded-[2rem] border border-[var(--panel-border)] bg-[var(--panel-bg)]/78 p-5 shadow-2xl backdrop-blur-xl lg:max-h-[calc(100dvh-10.5rem)]">
             <div className="flex items-center justify-between gap-3">
               <div><p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--text-muted)]">Results</p><h2 className="mt-1 text-xl font-black">Winner board</h2></div>
               <span className="rounded-full border border-[var(--panel-border)] bg-black/10 px-3 py-1 text-xs font-bold tabular-nums">{winnersHistory.reduce((total, group) => total + group.tickets.length, 0)}</span>

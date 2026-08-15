@@ -193,10 +193,16 @@ const LetterGlitch = ({
     };
 
     window.addEventListener('resize', handleResize);
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(handleResize);
+    resizeObserver?.observe(canvas.parentElement);
 
     return () => {
+      clearTimeout(resizeTimeout);
       cancelAnimationFrame(animationRef.current);
       window.removeEventListener('resize', handleResize);
+      resizeObserver?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [glitchSpeed, smooth]);

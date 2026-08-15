@@ -5,6 +5,17 @@
 @layer base {
   html,
   body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: #000;
+  }
+
+  html,
+  body,
   button,
   input,
   select,
@@ -15,6 +26,11 @@
     font-feature-settings: 'kern' 1, 'liga' 1, 'clig' 1, 'ccmp' 1, 'locl' 1, 'mark' 1, 'mkmk' 1;
     text-rendering: optimizeLegibility;
   }
+}
+
+.app-viewport {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .grand-finale-rays {
