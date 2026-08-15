@@ -188,12 +188,14 @@ begin
 end;
 $$;
 
-create or replace function public.request_remote_draw(
+drop function if exists public.request_remote_draw(uuid, text, uuid);
+
+create function public.request_remote_draw(
   p_room_id uuid,
   p_remote_key text,
   p_command_id uuid
 )
-returns uuid
+returns jsonb
 language plpgsql
 security definer
 set search_path = ''
@@ -223,13 +225,22 @@ begin
     raise exception 'Please wait before requesting another draw';
   end if;
 
+  -- Consume the rate-limit window before readiness checks so rejected requests
+  -- cannot hammer the public-state lookup while the host is unavailable.
+  update public.draw_rooms
+  set last_remote_request_at = now()
+  where room_id = p_room_id;
+
   select states.state into public_state
   from public.draw_public_states as states
   where states.room_id = p_room_id
     and states.expires_at > now();
 
   if public_state is null then
-    raise exception 'The host is not ready';
+    return jsonb_build_object(
+      'accepted', false,
+      'message', 'The host is not ready'
+    );
   end if;
 
   if not coalesce((public_state #>> '{live,remoteControlReady}')::boolean, false)
@@ -242,21 +253,23 @@ begin
       and coalesce((public_state #>> '{live,completedPrizeCount}')::integer, 0)
         >= coalesce((public_state #>> '{live,prizeCount}')::integer, 0)
     ) then
-    raise exception 'The host is not ready for another draw';
+    return jsonb_build_object(
+      'accepted', false,
+      'message', 'The host is not ready for another draw'
+    );
   end if;
 
   delete from public.draw_remote_commands
   where room_id = p_room_id and expires_at <= now();
 
-  update public.draw_rooms
-  set last_remote_request_at = now()
-  where room_id = p_room_id;
-
   insert into public.draw_remote_commands (command_id, room_id, command, expires_at)
   values (p_command_id, p_room_id, 'draw', least(room_expiry, now() + interval '12 seconds'))
   on conflict (command_id) do nothing;
 
-  return p_command_id;
+  return jsonb_build_object(
+    'accepted', true,
+    'commandId', p_command_id
+  );
 end;
 $$;
 

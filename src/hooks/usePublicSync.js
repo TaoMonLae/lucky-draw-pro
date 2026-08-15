@@ -124,14 +124,6 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
         }
       });
 
-    fetchLatestState().catch((error) => {
-      if (!cancelled) {
-        console.error('Failed to load live draw state', error);
-        setSyncStatus('error');
-        setErrorMessage(error.message || 'Could not load live draw state.');
-      }
-    });
-
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);

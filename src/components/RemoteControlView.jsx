@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { usePublicSync } from '../hooks/usePublicSync';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
@@ -20,6 +20,7 @@ export default function RemoteControlView({ credentials }) {
   const { drawState, syncStatus, errorMessage: syncError } = usePublicSync({ roomId });
   const [requestStatus, setRequestStatus] = useState('idle');
   const [requestMessage, setRequestMessage] = useState('');
+  const responseTimeoutRef = useRef(null);
   const live = drawState?.live;
   const isStandardDraw = !drawState?.operationMode || drawState.operationMode === 'standard';
   const drawComplete = Boolean(
@@ -41,6 +42,8 @@ export default function RemoteControlView({ credentials }) {
 
   useEffect(() => {
     if (live?.drawing) {
+      clearTimeout(responseTimeoutRef.current);
+      responseTimeoutRef.current = null;
       setRequestStatus('drawing');
       setRequestMessage('The host accepted the request. Drawing now…');
     } else if (requestStatus === 'drawing') {
@@ -48,6 +51,11 @@ export default function RemoteControlView({ credentials }) {
       setRequestMessage('Reveal complete. Ready for the next draw.');
     }
   }, [live?.drawing, requestStatus]);
+
+  useEffect(() => () => {
+    clearTimeout(responseTimeoutRef.current);
+    responseTimeoutRef.current = null;
+  }, []);
 
   const status = useMemo(() => {
     if (!credentialsValid) return { label: 'Invalid control link', color: 'bg-red-400' };
@@ -72,7 +80,9 @@ export default function RemoteControlView({ credentials }) {
 
     setRequestStatus('sending');
     setRequestMessage('Sending secure draw request…');
-    const { error } = await supabase.rpc('request_remote_draw', {
+    clearTimeout(responseTimeoutRef.current);
+    responseTimeoutRef.current = null;
+    const { data, error } = await supabase.rpc('request_remote_draw', {
       p_room_id: credentials.roomId,
       p_remote_key: credentials.remoteKey,
       p_command_id: commandId,
@@ -83,10 +93,16 @@ export default function RemoteControlView({ credentials }) {
       setRequestMessage(error.message || 'The draw request was rejected.');
       return;
     }
+    if (data && typeof data === 'object' && data.accepted === false) {
+      setRequestStatus('error');
+      setRequestMessage(data.message || 'The host is not ready for another draw.');
+      return;
+    }
 
     setRequestStatus('sent');
     setRequestMessage('Request sent. Waiting for the host computer…');
-    setTimeout(() => {
+    responseTimeoutRef.current = setTimeout(() => {
+      responseTimeoutRef.current = null;
       setRequestStatus((current) => {
         if (current !== 'sent') return current;
         setRequestMessage('The host did not respond. Check that its live tab is open, then try again.');

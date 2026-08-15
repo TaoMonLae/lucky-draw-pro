@@ -23,6 +23,7 @@ import { buildPublicViewUrl } from '../utils/publicViewUrl';
 import { useRealtimePublisher } from '../hooks/useRealtimePublisher';
 import { usePublicBroadcast } from '../hooks/usePublicBroadcast';
 import { useRemoteDrawController } from '../hooks/useRemoteDrawController';
+import { useFinaleModeReset } from '../hooks/useFinaleModeReset';
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 import { clearRoomCredentials, createRoomCredentials, loadRoomCredentials, saveRoomCredentials } from '../utils/realtimeRoom';
 import { buildRemoteControlUrl, clearRemoteControlCredentials, createRemoteControlCredentials, isHostReadyForRemoteDraw, loadRemoteControlCredentials, saveRemoteControlCredentials } from '../utils/remoteControl';
@@ -31,6 +32,7 @@ import LetterGlitch from './LetterGlitch';
 import GrandFinale from './GrandFinale';
 import WinnerCarousel from './WinnerCarousel';
 import AboutPanel from './AboutPanel';
+import { updatePrizeName } from '../utils/prizes';
 
 const DISPLAY_DEFAULTS = {
   titleFont: 'sans-serif',
@@ -469,6 +471,8 @@ export default function HostView() {
     document.addEventListener('pointerdown', closeSurfaceOnOutsideClick);
     return () => document.removeEventListener('pointerdown', closeSurfaceOnOutsideClick);
   }, [historyPanelOpen, showSettings]);
+
+  useFinaleModeReset({ operationMode, finaleTimeoutRef, setGrandFinalePhase, setShowConfetti });
 
   // Logic Functions
   const getPrizeName = () => {
@@ -1854,9 +1858,8 @@ export default function HostView() {
                                 {prizes.map((prize, index) => (
                                     <div key={prize.id} className="flex items-center gap-2 mb-2">
                                         <Input type="text" value={prize.name} disabled={drawing} onChange={e => {
-                                            const newPrizes = [...prizes];
-                                            newPrizes[index].name = e.target.value;
-                                            setPrizes(newPrizes);
+                                            const nextName = e.target.value;
+                                            setPrizes((currentPrizes) => updatePrizeName(currentPrizes, index, nextName));
                                         }} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                         <Button aria-label={`Remove ${prize.name || 'prize'}`} disabled={drawing} onClick={() => setPrizes(prizes.filter(p => p.id !== prize.id))} className="!bg-red-600 text-xs !p-2">X</Button>
                                     </div>

@@ -55,9 +55,15 @@ export function normalizeEntries(rawEntries = [], drawMode = 'numbers') {
   const keyToEntry = new Map();
   const duplicateGroups = [];
   let blankCount = 0;
+  const normalizedValues = rawEntries.map((entry) => collapseWhitespace(String(entry ?? '')));
+  const numericWidth = drawMode === 'numbers'
+    ? normalizedValues.reduce((maximum, value) => Math.max(maximum, value.length), 0)
+    : 0;
 
-  rawEntries.forEach((entry) => {
-    const normalized = collapseWhitespace(String(entry ?? ''));
+  normalizedValues.forEach((value) => {
+    const normalized = drawMode === 'numbers' && value
+      ? value.padStart(numericWidth, '0')
+      : value;
     if (!normalized) {
       blankCount += 1;
       return;
