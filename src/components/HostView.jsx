@@ -33,6 +33,7 @@ import GrandFinale from './GrandFinale';
 import WinnerCarousel from './WinnerCarousel';
 import AboutPanel from './AboutPanel';
 import { updatePrizeName } from '../utils/prizes';
+import { selectRandomEntries } from '../utils/secureRandom';
 
 const DISPLAY_DEFAULTS = {
   titleFont: 'sans-serif',
@@ -1295,12 +1296,7 @@ export default function HostView() {
       playDrumroll(winnersHistory.length, prizes.length);
     }
 
-    const drawnTickets = [];
-    let tempPool = [...sourcePool];
-    for(let i = 0; i < numToDraw; i++) {
-        const winnerIndex = Math.floor(Math.random() * tempPool.length);
-        drawnTickets.push(tempPool.splice(winnerIndex, 1)[0]);
-    }
+    const drawnTickets = selectRandomEntries(sourcePool, numToDraw);
 
     for (let i = 0; i < drawnTickets.length; i++) {
         const ticket = drawnTickets[i];

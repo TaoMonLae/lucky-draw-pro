@@ -18,6 +18,16 @@ describe('parseEntries', () => {
     expect(result.entries).toEqual(['001', '002', '003']);
   });
 
+  test('includes both boundaries of the reported 20061-50060 range', () => {
+    const result = parseEntries('20061-50060', 'numbers');
+
+    expect(result.entries).toHaveLength(30000);
+    expect(result.entries[0]).toBe('20061');
+    expect(result.entries[19938]).toBe('39999');
+    expect(result.entries[19939]).toBe('40000');
+    expect(result.entries.at(-1)).toBe('50060');
+  });
+
   test('accepts a number range containing exactly 70,000 tickets', () => {
     const result = parseEntries(`1-${MAX_ENTRIES}`, 'numbers');
     expect(result.error).toBeUndefined();
