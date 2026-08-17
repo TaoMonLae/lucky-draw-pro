@@ -112,10 +112,12 @@ export default function PublicView({ roomId = '' }) {
     totalEntries: legacyEntries.length,
     remainingEntriesCount: legacyRemainingEntries.length,
   };
-  const displayValue = live.displayValue || legacyDisplayValue;
-  const displayTypography = getTypographyProps(String(displayValue), displayFont, displayLetterSpacing);
   const assignmentResult = lastAssignmentResult?.mode === operationMode ? lastAssignmentResult : null;
   const isAssignmentView = assignmentResult?.mode === 'team-divider' || assignmentResult?.mode === 'role-selector';
+  const displayValue = operationMode !== 'standard' && !live.drawing && !assignmentResult
+    ? 'Ready'
+    : live.displayValue || legacyDisplayValue;
+  const displayTypography = getTypographyProps(String(displayValue), displayFont, displayLetterSpacing);
   const isGrandFinaleActive = live.grandFinalePhase !== 'idle';
   const isGrandFinaleReveal = live.grandFinalePhase === 'reveal';
   const drawComplete = live.prizeCount > 0 && live.completedPrizeCount >= live.prizeCount;
@@ -176,7 +178,7 @@ export default function PublicView({ roomId = '' }) {
 
         {errorMessage && <p role="alert" className="mt-3 rounded-xl border border-red-400/20 bg-red-500/15 px-4 py-2 text-center text-sm text-red-100 backdrop-blur-md">{errorMessage}</p>}
 
-        <div className="grid flex-1 grid-cols-1 gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6 lg:py-6">
+        <div className={`grid flex-1 grid-cols-1 gap-4 py-4 lg:gap-6 lg:py-6 ${operationMode === 'standard' ? 'lg:grid-cols-[minmax(0,1fr)_340px]' : ''}`}>
           <section className="relative flex min-h-[58vh] flex-col justify-center overflow-hidden rounded-[2rem] border border-[var(--panel-border)] bg-[var(--panel-bg)]/70 p-5 shadow-2xl backdrop-blur-xl sm:p-8 lg:min-h-0">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(255,255,255,0.1),transparent_48%)]" />
             <div className="relative z-10">
@@ -199,7 +201,7 @@ export default function PublicView({ roomId = '' }) {
                     style={{ borderColor: isGrandFinaleActive ? '#fde047' : 'var(--display-border)' }}
                   >
                     <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_20%,rgba(255,255,255,.08)_48%,transparent_72%)]" />
-                    {drawMode === 'numbers' ? (
+                    {operationMode === 'standard' && drawMode === 'numbers' ? (
                       <div lang={displayTypography.lang} className="relative flex max-w-full items-center justify-center font-black" style={{ ...displayTypography.style, color: 'var(--display-text)', fontSize: `clamp(3rem, ${Math.min(displayFontSize, 150)}px, ${Math.max(8, 70 / Math.max(maxDigits, 1))}vw)`, lineHeight: displayLineHeight, textShadow: `0 0 28px ${currentTheme['--display-shadow']}`, fontVariantNumeric: 'tabular-nums lining-nums' }}>
                         {getPaddedDigits(displayValue, maxDigits).map((digit, index) => (
                           <span key={index} className="inline-block w-[1ch] text-center"><AnimatePresence mode="popLayout"><motion.span key={`${digit}-${index}`} initial={{ opacity: 0.45, y: -35, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} exit={{ opacity: 0.25, y: 35, filter: 'blur(4px)' }} transition={{ duration: 0.2 }}>{digit}</motion.span></AnimatePresence></span>
@@ -222,7 +224,7 @@ export default function PublicView({ roomId = '' }) {
             </div>
           </section>
 
-          <aside className="flex min-h-0 flex-col rounded-[2rem] border border-[var(--panel-border)] bg-[var(--panel-bg)]/78 p-5 shadow-2xl backdrop-blur-xl lg:max-h-[calc(100dvh-10.5rem)]">
+          {operationMode === 'standard' && <aside className="flex min-h-0 flex-col rounded-[2rem] border border-[var(--panel-border)] bg-[var(--panel-bg)]/78 p-5 shadow-2xl backdrop-blur-xl lg:max-h-[calc(100dvh-10.5rem)]">
             <div className="flex items-center justify-between gap-3">
               <div><p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--text-muted)]">Results</p><h2 className="mt-1 text-xl font-black">Winner board</h2></div>
               <span className="rounded-full border border-[var(--panel-border)] bg-black/10 px-3 py-1 text-xs font-bold tabular-nums">{winnersHistory.reduce((total, group) => total + group.tickets.length, 0)}</span>
@@ -244,7 +246,7 @@ export default function PublicView({ roomId = '' }) {
               </AnimatePresence>
             </div>
             {drawState.updatedAt && !Number.isNaN(Date.parse(drawState.updatedAt)) && <p className="mt-4 text-center text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Updated {new Date(drawState.updatedAt).toLocaleTimeString()}</p>}
-          </aside>
+          </aside>}
         </div>
       </div>
     </main>

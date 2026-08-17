@@ -1,4 +1,4 @@
-import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from './drawModes';
+import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet, parseRoleRules } from './drawModes';
 
 describe('divideIntoTeams', () => {
   test('balances members as evenly as possible', () => {
@@ -34,6 +34,22 @@ describe('assignRoles', () => {
     );
 
     expect(assignments[0].participants).toHaveLength(4);
+  });
+});
+
+describe('parseRoleRules', () => {
+  test('parses valid newline and comma separated rules', () => {
+    expect(parseRoleRules('Host:1\nJudge:2,Usher:3').rules).toEqual([
+      { name: 'Host', count: 1 },
+      { name: 'Judge', count: 2 },
+      { name: 'Usher', count: 3 },
+    ]);
+  });
+
+  test('rejects malformed, duplicate, and excessive rules', () => {
+    expect(parseRoleRules('Host:many').error).toMatch(/Invalid role rule/);
+    expect(parseRoleRules('Host:1\nhost:2').error).toMatch(/Duplicate role/);
+    expect(parseRoleRules('Host:6', 5).error).toMatch(/cannot exceed/);
   });
 });
 

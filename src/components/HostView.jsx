@@ -18,7 +18,7 @@ import {
   getWinnerAnimationDurationMs,
   isGrandPrizeDraw,
 } from '../hooks/useDrawEngine';
-import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet } from '../utils/drawModes';
+import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet, parseRoleRules } from '../utils/drawModes';
 import { buildPublicViewUrl } from '../utils/publicViewUrl';
 import { useRealtimePublisher } from '../hooks/useRealtimePublisher';
 import { usePublicBroadcast } from '../hooks/usePublicBroadcast';
@@ -217,10 +217,11 @@ export default function HostView() {
   ]);
 
   const publicRemainingEntriesCount = useMemo(() => {
-    if (!noRepeatAcrossPrizes) return remainingEntries.length;
+    const activeEntries = operationMode === 'standard' ? remainingEntries : initialEntries;
+    if (!noRepeatAcrossPrizes) return activeEntries.length;
     const blockedEntries = getNoRepeatSet(auditLog);
-    return remainingEntries.filter((entry) => !blockedEntries.has(entry)).length;
-  }, [auditLog, noRepeatAcrossPrizes, remainingEntries]);
+    return activeEntries.filter((entry) => !blockedEntries.has(entry)).length;
+  }, [auditLog, initialEntries, noRepeatAcrossPrizes, operationMode, remainingEntries]);
 
   const publicLiveState = useMemo(() => ({
     ...appState,
@@ -231,7 +232,7 @@ export default function HostView() {
     publicDisplayValue,
     grandFinalePhase,
     showConfetti,
-    remoteControlReady: isHostReadyForRemoteDraw({
+    remoteControlReady: Boolean(remoteControl && liveRoom && remoteControl.roomId === liveRoom.roomId) && isHostReadyForRemoteDraw({
       drawing,
       isCharging,
       remainingEntriesCount: publicRemainingEntriesCount,
@@ -246,7 +247,7 @@ export default function HostView() {
   }), [
     appState, drawing, currentPrize, publicDisplayValue, grandFinalePhase,
     showConfetti, isCharging, operationMode, winnersHistory.length,
-    prizes, initialEntries.length, publicRemainingEntriesCount,
+    prizes, initialEntries.length, publicRemainingEntriesCount, liveRoom, remoteControl,
   ]);
 
   // --- SESSION MANAGEMENT ---
@@ -1189,16 +1190,6 @@ export default function HostView() {
     });
   };
 
-  const parseRoleRules = () => roleConfigText
-    .split(/\n|,/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [name, count] = line.split(':');
-      return { name: (name || '').trim(), count: Number.parseInt((count || '').trim(), 10) || 0 };
-    })
-    .filter((role) => role.name && role.count > 0);
-
   const drawNextWinner = async () => {
     if (drawLockRef.current || drawing) return;
     drawLockRef.current = true;
@@ -1231,9 +1222,9 @@ export default function HostView() {
         return;
       }
 
-      const roleRules = parseRoleRules();
-      if (roleRules.length === 0) {
-        setError('Add at least one valid role in Role:Count format.');
+      const { rules: roleRules, error: roleRulesError } = parseRoleRules(roleConfigText, MAX_ENTRIES);
+      if (roleRulesError) {
+        setError(roleRulesError);
         return;
       }
       const requestedRoleCount = roleRules.reduce((sum, role) => sum + role.count, 0);
@@ -1484,9 +1475,18 @@ export default function HostView() {
   const numberFontRem = Math.min(displayFontSize, Math.max(28, (displayBoxWidth - 48) / Math.max(maxDigits, 1))) / 16;
   const numberViewportMax = Math.min(24, 80 / Math.max(maxDigits, 1));
   const displayNumberFontSize = `clamp(1.75rem, ${numberFontRem}rem, ${numberViewportMax}vw)`;
+  const assignmentResultMatchesMode = lastAssignmentResult?.mode === operationMode;
+  const assignmentGroups = assignmentResultMatchesMode
+    ? lastAssignmentResult.mode === 'team-divider'
+      ? lastAssignmentResult.teams.map((team) => ({ label: team.teamName, members: team.members }))
+      : lastAssignmentResult.assignments.map((assignment) => ({ label: assignment.role, members: assignment.participants }))
+    : [];
+  const mainDisplayValue = operationMode === 'standard' || drawing || assignmentResultMatchesMode
+    ? displayValue
+    : 'Ready';
   const titleTypography = getTypographyProps(title, titleFont, titleLetterSpacing);
   const subtitleTypography = getTypographyProps(subtitle, subtitleFont, subtitleLetterSpacing);
-  const displayTypography = getTypographyProps(String(displayValue ?? ''), displayFont, displayLetterSpacing);
+  const displayTypography = getTypographyProps(String(mainDisplayValue ?? ''), displayFont, displayLetterSpacing);
   const shapedTitle = (value) => getTypographyProps(String(value ?? ''), titleFont, 0);
   const shapedDisplay = (value) => getTypographyProps(String(value ?? ''), displayFont, 0);
   const mainStyle = {
@@ -1567,20 +1567,27 @@ export default function HostView() {
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2.73l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2.73l.15-.08a2 2 0 0 0-.73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       </Button>
 
-      <div className="fixed bottom-2 right-2 sm:absolute sm:top-4 sm:left-1/2 sm:bottom-auto sm:right-auto sm:-translate-x-1/2 z-30 w-[min(78vw,320px)] sm:w-[min(900px,95vw)] rounded-xl sm:rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/85 backdrop-blur-md px-3 sm:px-4 py-1 sm:py-3 shadow-xl">
+      <div className="fixed bottom-2 right-2 sm:absolute sm:top-4 sm:left-1/2 sm:bottom-auto sm:right-auto sm:-translate-x-1/2 z-30 w-[min(78vw,320px)] sm:w-[min(900px,95vw)] rounded-xl sm:rounded-2xl border border-[var(--panel-border)] backdrop-blur-md px-3 sm:px-4 py-1 sm:py-3 shadow-xl" style={{ backgroundColor: 'var(--panel-bg)' }}>
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 text-xs sm:text-sm">
           <div>
             <p className="font-semibold">{quickStatus}</p>
-            <p style={{ color: 'var(--text-muted)' }} className="text-[10px] sm:text-sm">Current prize: <span className="font-semibold" style={{ color: 'var(--title-color)' }}>{getPrizeName()}</span></p>
+            <p style={{ color: 'var(--text-muted)' }} className="text-[10px] sm:text-sm">
+              {operationMode === 'standard' ? 'Current prize' : 'Mode'}:{' '}
+              <span className="font-semibold" style={{ color: 'var(--title-color)' }}>
+                {operationMode === 'team-divider' ? 'Team Divider' : operationMode === 'role-selector' ? 'Role Selector' : getPrizeName()}
+              </span>
+            </p>
           </div>
           <div className="text-right">
             <p className="text-sm sm:text-lg font-semibold tabular-nums">{currentTime.toLocaleTimeString()}</p>
             <p style={{ color: 'var(--text-muted)' }} className="hidden sm:block">Shortcut: Space draw · S settings · F fullscreen</p>
           </div>
         </div>
-        <div className="mt-1 sm:mt-3 h-1.5 sm:h-2 rounded-full" style={{ backgroundColor: 'var(--panel-border)' }}>
-          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${drawProgress}%`, backgroundColor: 'var(--button-action-bg)' }} />
-        </div>
+        {operationMode === 'standard' && (
+          <div className="mt-1 sm:mt-3 h-1.5 sm:h-2 rounded-full" style={{ backgroundColor: 'var(--panel-border)' }}>
+            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${drawProgress}%`, backgroundColor: 'var(--button-action-bg)' }} />
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -1604,7 +1611,8 @@ export default function HostView() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="settings-title"
-                className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-[var(--panel-border)] bg-[var(--panel-bg)]/95 shadow-2xl backdrop-blur-xl sm:w-[min(920px,calc(100vw-2rem))]"
+                className="fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-[var(--panel-border)] shadow-2xl sm:w-[min(920px,calc(100vw-2rem))]"
+                style={{ backgroundColor: 'var(--bg-color)' }}
             >
                 <header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--panel-border)] px-4 py-4 sm:px-6">
                     <div className="min-w-0">
@@ -1614,7 +1622,7 @@ export default function HostView() {
                             <span className={`hidden rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider sm:inline-flex ${drawing ? 'border-amber-400/40 bg-amber-400/10 text-amber-300' : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'}`}>{drawing ? 'Draw in progress' : 'Changes save automatically'}</span>
                         </div>
                     </div>
-                    <Button aria-label="Close settings" onClick={() => setShowSettings(false)} className="!rounded-full !bg-[var(--input-bg)] !p-2.5 hover:!opacity-80">
+                    <Button aria-label="Close settings" onClick={() => setShowSettings(false)} className="!rounded-full !bg-[var(--input-bg)] !p-2.5 !text-[var(--title-color)] ring-1 ring-[var(--panel-border)] hover:!opacity-80">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </Button>
                 </header>
@@ -1817,7 +1825,7 @@ export default function HostView() {
                                 {operationMode === 'team-divider' && (
                                   <div>
                                     <label className="text-xs mt-1 block">Number of Teams</label>
-                                    <Input type="number" min="2" value={teamCount} onChange={(e) => setTeamCount(Math.max(2, parseInt(e.target.value, 10) || 2))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
+                                    <Input type="number" min="2" max="100" value={teamCount} onChange={(e) => setTeamCount(Math.min(100, Math.max(2, parseInt(e.target.value, 10) || 2)))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} />
                                   </div>
                                 )}
                                 {operationMode === 'role-selector' && (
@@ -2023,8 +2031,11 @@ export default function HostView() {
         )}
               </AnimatePresence>
       
-      <div className="text-center z-10 w-full pl-8 sm:pl-0" style={{textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
-        <h1 lang={titleTypography.lang} className="font-bold break-words" style={{...titleTypography.style, color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, fontSize: `clamp(2rem, ${titleFontSize}px, 10vw)`}}>{title}</h1>
+      <div
+        className="text-center z-10 w-full max-w-[min(1100px,calc(100vw-3rem))] pl-8 sm:pl-0"
+        style={{ textShadow: theme === 'Corporate Blue' ? '0 2px 10px rgba(15,23,42,0.16)' : '0 2px 8px rgba(0,0,0,0.42)' }}
+      >
+        <h1 lang={titleTypography.lang} className="font-bold break-words" style={{...titleTypography.style, color: titleColor || 'var(--title-color)', lineHeight: titleLineSpacing, fontSize: `clamp(2rem, ${titleFontSize}px, min(10vw, 12vh))`}}>{title}</h1>
         <p lang={subtitleTypography.lang} className="mt-2 break-words" style={{...subtitleTypography.style, color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, fontSize: `clamp(0.875rem, ${subtitleFontSize}px, 6vw)`}}>{subtitle}</p>
       </div>
 
@@ -2078,7 +2089,20 @@ export default function HostView() {
                 transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
               />
             )}
-            {operationMode === 'standard' && drawMode === 'numbers' ? (
+            {assignmentResultMatchesMode && !drawing ? (
+                <div className="grid max-h-[min(42vh,320px)] w-full grid-cols-1 gap-3 overflow-y-auto p-1 sm:grid-cols-2">
+                  {assignmentGroups.map((group, groupIndex) => (
+                    <section key={`${group.label}-${groupIndex}`} className="rounded-xl border border-[var(--display-border)] bg-white/5 p-3 text-left">
+                      <h3 className="border-b border-[var(--display-border)] pb-2 text-base font-black" style={{ color: 'var(--display-text)' }}>{group.label}</h3>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {group.members.map((member, memberIndex) => (
+                          <span key={`${member}-${memberIndex}`} className="rounded-lg bg-black/15 px-2.5 py-1 text-sm font-semibold break-all" style={{ color: 'var(--display-text)' }}>{member}</span>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+            ) : operationMode === 'standard' && drawMode === 'numbers' ? (
                 <div lang={displayTypography.lang} className="flex items-center font-bold max-w-full" style={{...displayTypography.style, color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontSize: displayNumberFontSize, lineHeight: displayLineHeight, fontVariantNumeric: 'tabular-nums lining-nums'}}>
                     {getDigits(displayValue).map((digit, index) => (
                         <div key={index} className="w-[1ch] text-center overflow-hidden">
@@ -2094,7 +2118,7 @@ export default function HostView() {
                  <div lang={displayTypography.lang} className="font-bold px-4 text-center w-full" style={{...displayTypography.style, color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontSize: displayNameFontSize, lineHeight: displayLineHeight, wordBreak: 'break-word', overflowWrap: 'break-word'}}>
                     <AnimatePresence mode="popLayout">
                         <motion.span key={displayValue} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
-                            {displayValue}
+                            {mainDisplayValue}
                         </motion.span>
                     </AnimatePresence>
                 </div>
@@ -2103,7 +2127,11 @@ export default function HostView() {
       </div>
 
       <div className="flex flex-col items-center gap-2 z-20">
-        <div className="font-semibold">Prizes Drawn: {winnersHistory.length} / {prizes.length}</div>
+        <div className="font-semibold">
+          {operationMode === 'standard'
+            ? `Prizes Drawn: ${winnersHistory.length} / ${prizes.length}`
+            : assignmentResultMatchesMode ? 'Assignment complete' : 'Ready to assign'}
+        </div>
         <div className="text-sm" style={{color: 'var(--text-muted)'}}>{eligibleEntryCount} / {initialEntries.length} Entries Eligible</div>
         <div className="relative w-full max-w-xs mt-2">
             <AnimatePresence>
@@ -2157,8 +2185,8 @@ export default function HostView() {
         ref={historyPanelRef}
         aria-hidden={!historyPanelOpen}
         inert={!historyPanelOpen}
-        className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] bg-[var(--panel-bg)]/90 backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform duration-300 ${historyPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
-        style={{ transform: historyPanelOpen ? 'translateX(0)' : 'translateX(calc(-100% - 1rem))' }}
+        className={`fixed left-2 sm:left-4 top-24 bottom-4 w-[min(360px,92vw)] backdrop-blur-md p-3 sm:p-4 rounded-xl shadow-2xl z-20 border border-[var(--panel-border)] flex flex-col transition-transform duration-300 ${historyPanelOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        style={{ backgroundColor: 'var(--panel-bg)', transform: historyPanelOpen ? 'translateX(0)' : 'translateX(calc(-100% - 1rem))' }}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
           <h2 className="text-lg sm:text-2xl font-bold" style={{color: 'var(--title-color)'}}>History & Audit</h2>
@@ -2209,7 +2237,7 @@ export default function HostView() {
             <Button onClick={() => setExportAllTrigger(true)} disabled={drawing || winnersHistory.length === 0} className="!bg-green-600 hover:!bg-green-700 text-sm">Image (PNG)</Button>
             <Button onClick={handleExportWinnersCsv} disabled={drawing || winnersHistory.length === 0} className="!bg-teal-600 hover:!bg-teal-700 text-sm">Winners CSV</Button>
           </div>
-          {lastAssignmentResult && (
+          {assignmentResultMatchesMode && (
             <>
               <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">
                 Export {lastAssignmentResult.mode === 'team-divider' ? 'Teams' : 'Roles'}

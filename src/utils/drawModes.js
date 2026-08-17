@@ -61,6 +61,46 @@ export function assignRoles(participants = [], roleRules = [], options = {}, ran
   return assignments;
 }
 
+export function parseRoleRules(value = '', maxTotal = 50_000) {
+  const lines = String(value)
+    .split(/\n|,/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return { rules: [], error: 'Add at least one role in Role:Count format.' };
+  }
+
+  const rules = [];
+  const names = new Set();
+  for (const line of lines) {
+    const match = line.match(/^(.+?):\s*(\d+)$/);
+    if (!match) {
+      return { rules: [], error: `Invalid role rule "${line}". Use Role:Count.` };
+    }
+
+    const name = match[1].trim();
+    const count = Number.parseInt(match[2], 10);
+    if (!name || !Number.isSafeInteger(count) || count < 1) {
+      return { rules: [], error: `Invalid role rule "${line}". Count must be a positive whole number.` };
+    }
+
+    const normalizedName = name.toLocaleLowerCase();
+    if (names.has(normalizedName)) {
+      return { rules: [], error: `Duplicate role "${name}". Combine it into one rule.` };
+    }
+    names.add(normalizedName);
+    rules.push({ name, count });
+  }
+
+  const total = rules.reduce((sum, rule) => sum + rule.count, 0);
+  if (!Number.isSafeInteger(total) || total > maxTotal) {
+    return { rules: [], error: `Role assignments cannot exceed ${maxTotal.toLocaleString()} slots.` };
+  }
+
+  return { rules, error: null };
+}
+
 export function getNoRepeatSet(history = []) {
   const seen = new Set();
   history.forEach((entry) => {
