@@ -2068,7 +2068,7 @@ export default function HostView() {
                 minHeight: `${displayBoxHeight}px`,
                 height: 'auto',
                 maxHeight: 'min(45vh, 360px)',
-                overflowY: isGrandFinaleActive ? 'visible' : 'auto',
+                overflowY: isGrandFinaleActive ? 'visible' : 'hidden',
             }}
             animate={isGrandFinaleReveal
               ? { scale: [1, 1.06, 1.02], boxShadow: ['0 0 25px rgba(250,204,21,0.4)', '0 0 100px rgba(250,204,21,0.95)', '0 0 55px rgba(250,204,21,0.72)'] }
