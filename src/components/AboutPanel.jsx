@@ -58,7 +58,7 @@ export default function AboutPanel() {
         <p className="mb-3 text-xs font-black uppercase tracking-[.18em] text-[var(--text-color)]">Everything needed on show day</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {ABOUT_FEATURES.map((feature) => (
-            <article key={feature.title} className="rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/35 p-4 transition-colors hover:border-yellow-300/35">
+            <article key={feature.title} className="theme-input-soft rounded-2xl border border-[var(--panel-border)] p-4 transition-colors hover:border-yellow-300/35">
               <div className="flex items-start gap-3">
                 <span aria-hidden="true" className="flex h-9 min-w-9 items-center justify-center rounded-xl border border-[var(--panel-border)] bg-black/15 text-sm font-black text-yellow-300">{feature.icon}</span>
                 <div>
@@ -76,7 +76,7 @@ export default function AboutPanel() {
           <p className="text-xs font-black uppercase tracking-[.16em] text-emerald-300">Privacy and control</p>
           <p className="mt-2 text-xs leading-relaxed">Winner selection and eligibility checks stay on the host computer. Audience screens receive display-safe event state, while the MC remote can only request a draw—it cannot choose winners or access the participant list.</p>
         </div>
-        <div className="flex flex-col justify-center rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/35 p-4">
+        <div className="theme-input-soft flex flex-col justify-center rounded-2xl border border-[var(--panel-border)] p-4">
           <p className="text-[10px] font-black uppercase tracking-[.16em]">Created by</p>
           <p className="mt-1 text-base font-black text-[var(--text-color)]">Tao Mon Lae</p>
           <p className="mt-1 text-[11px]">Built for exciting, reliable live events.</p>

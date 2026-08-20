@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 export const MON_CHARACTERS = 'ကခဂဃၚစဆဇၛဉညဋဌဍဎဏတထဒဓနပဖဗဘမယရလဝသဟဠအၜၝဣဥဨ';
 const DEFAULT_CHARACTERS = `ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$&*()-_+=/[]{};:<>.,0123456789${MON_CHARACTERS}`;
@@ -19,7 +19,8 @@ const LetterGlitch = ({
   const context = useRef(null);
   const lastGlitchTime = useRef(Date.now());
 
-  const lettersAndSymbols = Array.from(characters);
+  const lettersAndSymbols = useMemo(() => Array.from(characters), [characters]);
+  const glitchColorsKey = glitchColors.join('|');
 
   const fontSize = 16;
   const charWidth = 10;
@@ -205,7 +206,7 @@ const LetterGlitch = ({
       resizeObserver?.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [glitchSpeed, smooth]);
+  }, [characters, glitchColorsKey, glitchSpeed, smooth]);
 
   const containerStyle = {
     position: 'relative',

@@ -33,6 +33,25 @@
   min-height: 100dvh;
 }
 
+/* Tailwind opacity modifiers do not compile reliably for color CSS variables. */
+.theme-panel-surface {
+  background-color: var(--panel-bg);
+}
+
+.theme-input-soft {
+  background-color: var(--input-bg);
+  background-color: color-mix(in srgb, var(--input-bg) 35%, transparent);
+}
+
+.hover-theme-input-soft:hover {
+  background-color: var(--input-bg);
+  background-color: color-mix(in srgb, var(--input-bg) 35%, transparent);
+}
+
+.theme-action-soft {
+  background-color: color-mix(in srgb, var(--button-action-bg) 12%, transparent);
+}
+
 .grand-finale-rays {
   background: repeating-conic-gradient(
     from 0deg,

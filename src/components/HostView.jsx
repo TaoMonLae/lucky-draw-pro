@@ -535,7 +535,8 @@ export default function HostView() {
       if (!lastWinnerGroup) return;
       setWinnersHistory(winnersHistory.slice(0, -1));
       const restored = [...remainingEntries, ...lastWinnerGroup.tickets];
-      setRemainingEntries(Array.from(new Set(restored)).sort());
+      const restoredSet = new Set(restored);
+      setRemainingEntries(initialEntries.filter((entry) => restoredSet.has(entry)));
       setDisplayValue(lastWinnerGroup.tickets[0]);
     } else {
       setDisplayValue(initialEntries[0] || 'Ready');
@@ -1215,9 +1216,7 @@ export default function HostView() {
         for (let i = 0; i < teams.length; i++) {
           setDisplayValue(`${teams[i].teamName}: ${teams[i].members.join(', ')}`);
           setPulse(true);
-          if (i < teams.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 2500));
-          }
+          await new Promise((resolve) => setTimeout(resolve, i < teams.length - 1 ? 2500 : 900));
         }
         return;
       }
@@ -1242,9 +1241,7 @@ export default function HostView() {
       for (let i = 0; i < assignments.length; i++) {
         setDisplayValue(`${assignments[i].role}: ${assignments[i].participants.join(', ')}`);
         setPulse(true);
-        if (i < assignments.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2500));
-        }
+        await new Promise((resolve) => setTimeout(resolve, i < assignments.length - 1 ? 2500 : 900));
       }
       return;
     }
@@ -1634,7 +1631,7 @@ export default function HostView() {
                               key={section.id}
                               type="button"
                               aria-current={settingsTab === section.id ? 'page' : undefined}
-                              className={`group flex min-w-[140px] items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all sm:min-w-0 ${settingsTab === section.id ? 'border-[var(--button-action-bg)] bg-[var(--button-action-bg)]/15 text-[var(--title-color)] shadow-lg' : 'border-transparent text-[var(--text-muted)] hover:border-[var(--panel-border)] hover:bg-[var(--input-bg)]/40 hover:text-[var(--text-color)]'}`}
+                              className={`group flex min-w-[140px] items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all sm:min-w-0 ${settingsTab === section.id ? 'theme-action-soft border-[var(--button-action-bg)] text-[var(--title-color)] shadow-lg' : 'hover-theme-input-soft border-transparent text-[var(--text-muted)] hover:border-[var(--panel-border)] hover:text-[var(--text-color)]'}`}
                               onClick={() => setSettingsTab(section.id)}
                             >
                                 <span aria-hidden="true" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-lg font-black ${settingsTab === section.id ? 'bg-[var(--button-action-bg)] text-slate-950' : 'bg-[var(--input-bg)]'}`}>{section.icon}</span>
@@ -1644,7 +1641,7 @@ export default function HostView() {
                     </nav>
 
                     <div className="flex-grow overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
-                        <div className="mb-6 rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/30 p-4">
+                        <div className="theme-input-soft mb-6 rounded-2xl border border-[var(--panel-border)] p-4">
                             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--text-muted)]">{activeSettingsSection.label}</p>
                             <h3 className="mt-1 text-xl font-black text-[var(--text-color)]">{activeSettingsSection.description}</h3>
                         </div>
@@ -1656,7 +1653,7 @@ export default function HostView() {
                                     {Object.keys(themes).map(themeName => (<option key={themeName} value={themeName}>{themeName}</option>))}
                                 </select>
                             </div>
-                            <div className="rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/40 p-3 text-xs text-[var(--text-muted)]">
+                            <div className="theme-input-soft rounded-lg border border-[var(--panel-border)] p-3 text-xs text-[var(--text-muted)]">
                                 Burmese text uses native OpenType shaping with kerning and ligatures. Tracking is automatically disabled for Myanmar text, and Mon-specific characters use the complete Unicode-safe Noto Sans Myanmar face to prevent broken clusters.
                             </div>
                             <div>
@@ -1672,7 +1669,7 @@ export default function HostView() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-xs mt-1 block">Font Size (px)</label>
-                                        <Input type="range" value={titleFontSize} onChange={e => setTitleFontSize(parseInt(e.target.value, 10) || 16)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                        <Input type="range" min="8" max="300" step="1" value={titleFontSize} onChange={e => setTitleFontSize(parseInt(e.target.value, 10) || 16)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                     <div>
                                         <label className="text-xs mt-1 block">Line Spacing</label>
@@ -1697,7 +1694,7 @@ export default function HostView() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-xs mt-1 block">Font Size (px)</label>
-                                        <Input type="range" value={subtitleFontSize} onChange={e => setSubtitleFontSize(parseInt(e.target.value, 10) || 16)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
+                                        <Input type="range" min="8" max="200" step="1" value={subtitleFontSize} onChange={e => setSubtitleFontSize(parseInt(e.target.value, 10) || 16)} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
                                     </div>
                                     <div>
                                         <label className="text-xs mt-1 block">Line Spacing</label>
@@ -1746,7 +1743,7 @@ export default function HostView() {
                     )}
                     {settingsTab === 'draw' && (
                         <div className="space-y-6">
-                            <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/25 p-4">
+                            <div className="theme-input-soft rounded-2xl border border-[var(--panel-border)] p-4">
                                 <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Participants & Draw Mode</p>
                                 <p className="mt-1 text-xs text-[var(--text-muted)]">Build the eligible pool, choose how winners are selected, and configure fairness before going live.</p>
                             </div>
@@ -1769,7 +1766,7 @@ export default function HostView() {
                                 <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".txt" className="hidden" />
                                 <input type="file" ref={csvInputRef} onChange={handleCsvImport} accept=".csv,text/csv" className="hidden" />
 
-                                <div className="mt-3 p-3 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/40">
+                                <div className="theme-input-soft mt-3 p-3 rounded-lg border border-[var(--panel-border)]">
                                     <div className="flex items-center justify-between mb-2">
                                       <p className="text-sm font-semibold">Participant Editor</p>
                                       <p className="text-xs text-[var(--text-muted)]">Total: {initialEntries.length}</p>
@@ -1815,7 +1812,7 @@ export default function HostView() {
                                     </div>
                                   )}
                             </div>
-                            <div className="p-3 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/30 space-y-3">
+                            <div className="theme-input-soft p-3 rounded-lg border border-[var(--panel-border)] space-y-3">
                                 <label className="font-semibold text-sm mb-1 block">Operation Mode</label>
                                 <select value={operationMode} onChange={(e) => setOperationMode(e.target.value)} disabled={drawing} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm disabled:opacity-50">
                                     <option value="standard">Standard Draw</option>
@@ -1840,14 +1837,18 @@ export default function HostView() {
                                 )}
                                 <div className="pt-2 border-t border-[var(--panel-border)] space-y-2">
                                   <p className="text-xs font-semibold">Fairness Controls</p>
-                                  <label className="flex items-center gap-2 text-xs">
-                                    <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'remove'} onChange={() => setWinnerEligibilityMode('remove')} disabled={drawing} />
-                                    Remove winner from future rounds
-                                  </label>
-                                  <label className="flex items-center gap-2 text-xs">
-                                    <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'keep'} onChange={() => setWinnerEligibilityMode('keep')} disabled={drawing} />
-                                    Keep winner eligible
-                                  </label>
+                                  {operationMode === 'standard' && (
+                                    <>
+                                      <label className="flex items-center gap-2 text-xs">
+                                        <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'remove'} onChange={() => setWinnerEligibilityMode('remove')} disabled={drawing} />
+                                        Remove winner from future rounds
+                                      </label>
+                                      <label className="flex items-center gap-2 text-xs">
+                                        <input type="radio" name="eligibility" checked={winnerEligibilityMode === 'keep'} onChange={() => setWinnerEligibilityMode('keep')} disabled={drawing} />
+                                        Keep winner eligible
+                                      </label>
+                                    </>
+                                  )}
                                   <label className="flex items-center gap-2 text-xs">
                                     <input type="checkbox" checked={noRepeatAcrossPrizes} onChange={(e) => setNoRepeatAcrossPrizes(e.target.checked)} disabled={drawing} />
                                     No repeat across prizes/modes
@@ -1909,7 +1910,7 @@ export default function HostView() {
                     )}
                     {settingsTab === 'sound' && (
                         <div className="space-y-6">
-                            <div className="flex items-center justify-between rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/25 p-4">
+                            <div className="theme-input-soft flex items-center justify-between rounded-2xl border border-[var(--panel-border)] p-4">
                                 <div><p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Volume Controls</p><p className="mt-1 text-xs text-[var(--text-muted)]">Balance the draw cues and celebration layers independently.</p></div>
                                 <button onClick={resetAudioSettings} className="text-xs px-2 py-1 rounded bg-[var(--input-bg)] border border-[var(--panel-border)] hover:opacity-80">Reset defaults</button>
                             </div>
@@ -1925,7 +1926,7 @@ export default function HostView() {
                                 <label className="font-semibold text-sm mb-1 block">Celebration Volume ({musicVolume} dB)</label>
                                 <input type="range" min="-40" max="6" step="1" value={musicVolume} onChange={e => setMusicVolume(Number(e.target.value))} className="w-full" />
                             </div>
-                            <div className="rounded-2xl border border-[var(--panel-border)] bg-[var(--input-bg)]/25 p-4">
+                            <div className="theme-input-soft rounded-2xl border border-[var(--panel-border)] p-4">
                                 <h3 className="text-lg font-bold text-[var(--text-color)] mb-1">Cue Preview</h3>
                                 <p className="mb-3 text-xs text-[var(--text-muted)]">Preview the regular-prize build and layered Magnific celebration.</p>
                                 <div className="grid grid-cols-2 gap-4">
@@ -1947,7 +1948,7 @@ export default function HostView() {
                                     <p className="mt-1 text-[var(--text-muted)]">Run <code>supabase/schema.sql</code>, add <code>REACT_APP_SUPABASE_URL</code> and <code>REACT_APP_SUPABASE_PUBLISHABLE_KEY</code> to Vercel, then redeploy.</p>
                                 </div>
                             ) : liveRoom ? (
-                                <div className="rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/40 p-3 space-y-2">
+                                <div className="theme-input-soft rounded-lg border border-[var(--panel-border)] p-3 space-y-2">
                                     <div className="flex items-center justify-between gap-3">
                                         <span className="font-semibold text-sm">Cross-device room</span>
                                         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${liveSync.status === 'live' ? 'bg-green-600 text-white' : liveSync.status === 'error' ? 'bg-red-600 text-white' : 'bg-amber-400 text-gray-900'}`}>{LIVE_SYNC_LABELS[liveSync.status] || liveSync.status}</span>
@@ -1956,7 +1957,7 @@ export default function HostView() {
                                     {liveSync.errorMessage && <p role="alert" className="text-xs text-red-400">{liveSync.errorMessage}</p>}
                                 </div>
                             ) : (
-                                <div className="rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/40 p-3">
+                                <div className="theme-input-soft rounded-lg border border-[var(--panel-border)] p-3">
                                     <p className="text-sm text-[var(--text-muted)] mb-3">Cross-device sharing is currently off. A room automatically expires after seven days.</p>
                                     <Button onClick={startLiveRoom} disabled={drawing || roomActionPending} className="w-full !bg-green-600 hover:!bg-green-700">Start Cross-Device Room</Button>
                                 </div>
@@ -2009,7 +2010,7 @@ export default function HostView() {
                         <div className="space-y-4">
                             <p className="text-sm text-[var(--text-muted)]">Load a preset to quickly configure the app for a specific event type. This updates the title, prizes, draw mode, operation mode, and theme — your participant list is untouched.</p>
                             {sessionTemplates.map(template => (
-                                <div key={template.id} className="p-3 rounded-lg border border-[var(--panel-border)] bg-[var(--input-bg)]/30">
+                                <div key={template.id} className="theme-input-soft p-3 rounded-lg border border-[var(--panel-border)]">
                                     <div className="flex items-start justify-between gap-3">
                                         <div>
                                             <p className="font-semibold text-sm">{template.label}</p>

@@ -54,7 +54,7 @@ function AssignmentBoard({ assignmentResult, displayFont, titleFont }) {
   return (
     <div className="grid max-h-[58vh] grid-cols-1 gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
       {groups.map((group, index) => (
-        <motion.section key={`${group.label}-${index}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }} className="rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/80 p-5 shadow-xl backdrop-blur-md">
+        <motion.section key={`${group.label}-${index}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }} className="theme-panel-surface rounded-2xl border border-[var(--panel-border)] p-5 shadow-xl backdrop-blur-md">
           <ShapedText as="h3" fontFamily={titleFont} className="border-b border-[var(--panel-border)] pb-3 text-xl font-black break-words" style={{ color: 'var(--title-color)' }}>{group.label}</ShapedText>
           <ul className="mt-3 space-y-2">
             {group.members.map((member, memberIndex) => (
@@ -162,7 +162,7 @@ export default function PublicView({ roomId = '' }) {
       ))}
 
       <div className="relative z-20 mx-auto flex min-h-[calc(100dvh-2rem)] max-w-[1500px] flex-col">
-        <header className="flex items-start justify-between gap-4 rounded-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)]/80 p-4 shadow-2xl backdrop-blur-xl sm:items-center sm:px-6">
+        <header className="theme-panel-surface flex items-start justify-between gap-4 rounded-2xl border border-[var(--panel-border)] p-4 shadow-2xl backdrop-blur-xl sm:items-center sm:px-6">
           <div className="flex min-w-0 items-center gap-3 sm:gap-5">
             {logo && <img src={logo} alt="Event Logo" className="h-12 w-auto max-w-24 object-contain sm:h-16 sm:max-w-40" />}
             <div className="min-w-0">
@@ -179,7 +179,7 @@ export default function PublicView({ roomId = '' }) {
         {errorMessage && <p role="alert" className="mt-3 rounded-xl border border-red-400/20 bg-red-500/15 px-4 py-2 text-center text-sm text-red-100 backdrop-blur-md">{errorMessage}</p>}
 
         <div className={`grid flex-1 grid-cols-1 gap-4 py-4 lg:gap-6 lg:py-6 ${operationMode === 'standard' ? 'lg:grid-cols-[minmax(0,1fr)_340px]' : ''}`}>
-          <section className="relative flex min-h-[58vh] flex-col justify-center overflow-hidden rounded-[2rem] border border-[var(--panel-border)] bg-[var(--panel-bg)]/70 p-5 shadow-2xl backdrop-blur-xl sm:p-8 lg:min-h-0">
+          <section className="theme-panel-surface relative flex min-h-[58vh] flex-col justify-center overflow-hidden rounded-[2rem] border border-[var(--panel-border)] p-5 shadow-2xl backdrop-blur-xl sm:p-8 lg:min-h-0">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(255,255,255,0.1),transparent_48%)]" />
             <div className="relative z-10">
               {isAssignmentView && !live.drawing ? (
@@ -224,7 +224,7 @@ export default function PublicView({ roomId = '' }) {
             </div>
           </section>
 
-          {operationMode === 'standard' && <aside className="flex min-h-0 flex-col rounded-[2rem] border border-[var(--panel-border)] bg-[var(--panel-bg)]/78 p-5 shadow-2xl backdrop-blur-xl lg:max-h-[calc(100dvh-10.5rem)]">
+          {operationMode === 'standard' && <aside className="theme-panel-surface flex min-h-0 flex-col rounded-[2rem] border border-[var(--panel-border)] p-5 shadow-2xl backdrop-blur-xl lg:max-h-[calc(100dvh-10.5rem)]">
             <div className="flex items-center justify-between gap-3">
               <div><p className="text-[10px] font-black uppercase tracking-[0.24em] text-[var(--text-muted)]">Results</p><h2 className="mt-1 text-xl font-black">Winner board</h2></div>
               <span className="rounded-full border border-[var(--panel-border)] bg-black/10 px-3 py-1 text-xs font-bold tabular-nums">{winnersHistory.reduce((total, group) => total + group.tickets.length, 0)}</span>
@@ -234,7 +234,7 @@ export default function PublicView({ roomId = '' }) {
             <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
               <AnimatePresence initial={false}>
                 {winnersHistory.length ? [...winnersHistory].reverse().map((group, reverseIndex) => (
-                  <motion.article key={`${group.prize}-${winnersHistory.length - reverseIndex}`} initial={{ opacity: 0, x: 25, scale: 0.96 }} animate={{ opacity: 1, x: 0, scale: 1 }} className={`rounded-2xl border p-4 ${reverseIndex === 0 ? 'border-[var(--button-action-bg)] bg-[var(--button-action-bg)]/10 shadow-lg' : 'border-[var(--panel-border)] bg-black/5'}`}>
+                  <motion.article key={`${group.prize}-${winnersHistory.length - reverseIndex}`} initial={{ opacity: 0, x: 25, scale: 0.96 }} animate={{ opacity: 1, x: 0, scale: 1 }} className={`rounded-2xl border p-4 ${reverseIndex === 0 ? 'theme-action-soft border-[var(--button-action-bg)] shadow-lg' : 'border-[var(--panel-border)] bg-black/5'}`}>
                     <ShapedText as="h3" fontFamily={titleFont} className="text-sm font-black break-words" style={{ color: reverseIndex === 0 ? 'var(--title-color)' : 'var(--text-muted)' }}>{group.prize}</ShapedText>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {group.tickets.map((ticket, ticketIndex) => <ShapedText key={`${ticket}-${ticketIndex}`} fontFamily={displayFont} className="rounded-lg bg-[var(--display-bg)] px-3 py-1.5 text-lg font-black break-all" style={{ color: 'var(--display-text)' }}>{ticket}</ShapedText>)}
