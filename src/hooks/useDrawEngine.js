@@ -30,6 +30,22 @@ export function getNumericReelConfigs(digitCount, isGrandFinal = false) {
   });
 }
 
+export function getLockedDigitCount(reels, elapsed) {
+  return reels.filter(({ start, duration }) => elapsed >= start + duration).length;
+}
+
+export function getSpinningDigit(winnerDigit, elapsed, duration, isGrandFinal = false) {
+  const finalDigit = Number(winnerDigit);
+  if (!Number.isInteger(finalDigit) || finalDigit < 0 || finalDigit > 9) return winnerDigit;
+  if (elapsed >= duration) return finalDigit;
+
+  // Keep an unlocked reel moving and reserve the winning digit for its actual lock.
+  const stepDuration = isGrandFinal ? 260 : 120;
+  const remainingSteps = Math.ceil((duration - Math.max(0, elapsed)) / stepDuration);
+  const offset = ((remainingSteps - 1) % 9) + 1;
+  return (finalDigit + offset) % 10;
+}
+
 export function getWinnerAnimationDurationMs({ drawMode, digitCount, isGrandFinal = false }) {
   if (drawMode === 'names') {
     return isGrandFinal ? GRAND_FINALE_DRAW_DURATION_MS : REGULAR_NAME_DRAW_DURATION_MS;

@@ -72,7 +72,11 @@ describe('public realtime state', () => {
       drawing: true,
       currentPrize: 'Grand Prize',
       publicDisplayValue: '00042',
+      lockedDigitCount: 3,
+      lockedDigits: '000',
       grandFinalePhase: 'build',
+      celebrationIndex: 0,
+      celebrationPlaying: true,
       showConfetti: true,
       remoteControlReady: false,
       completedPrizeCount: 2,
@@ -89,9 +93,15 @@ describe('public realtime state', () => {
     expect(publicState.titleFont).toContain('Z20 Khit Haungg');
     expect(publicState.live).toEqual({
       drawing: true,
+      charging: false,
+      chargeProgress: 0,
       currentPrize: 'Grand Prize',
       displayValue: '00042',
+      lockedDigitCount: 3,
+      lockedDigits: '000',
       grandFinalePhase: 'build',
+      celebrationIndex: 0,
+      celebrationPlaying: true,
       showConfetti: true,
       remoteControlReady: false,
       completedPrizeCount: 2,
@@ -104,6 +114,23 @@ describe('public realtime state', () => {
       ...publicState,
       live: { ...publicState.live, grandFinalePhase: 'carousel' },
     })).toBe(true);
+    expect(isValidPublicDrawState({
+      ...publicState,
+      live: { ...publicState.live, celebrationIndex: -1 },
+    })).toBe(false);
+    expect(isValidPublicDrawState({
+      ...publicState,
+      live: { ...publicState.live, celebrationPlaying: 'yes' },
+    })).toBe(false);
+    expect(isValidPublicDrawState({
+      ...publicState,
+      live: { ...publicState.live, lockedDigitCount: -1 },
+    })).toBe(false);
+    expect(isValidPublicDrawState({
+      ...publicState,
+      live: { ...publicState.live, lockedDigits: '0004' },
+    })).toBe(false);
+    expect(toPublicDrawState({ isCharging: true, chargeProgress: 34 }).live.chargeProgress).toBe(34);
   });
 
   test('continues accepting legacy public snapshots', () => {

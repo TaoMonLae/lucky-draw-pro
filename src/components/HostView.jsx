@@ -6,13 +6,15 @@ import { themes, fonts } from '../utils/themeConfig';
 import { Button, Input, ConfettiParticle } from './ui';
 import { useSessionStorage } from '../hooks/useSessionStorage';
 import { useAudioEngine } from '../hooks/useAudioEngine';
-import { MAX_ENTRIES, parseEntries, parseEntriesFromCsv } from '../utils/parseEntries';
+import { MAX_ENTRIES, formatEntriesForInput, parseEntries, parseEntriesFromCsv } from '../utils/parseEntries';
 import { downloadJson, downloadCsv, buildWinnersCsvRows, buildAuditLogCsvRows, buildAssignmentCsvRows } from '../utils/exportUtils';
 import { isValidSessionData, parseSessionJson } from '../utils/validation';
 import { sessionTemplates } from '../utils/sessionTemplates';
 import {
   GRAND_FINALE_DRAW_DURATION_MS,
   REGULAR_NAME_DRAW_DURATION_MS,
+  getLockedDigitCount,
+  getSpinningDigit,
   getNumericReelConfigs,
   getPaddedDigits,
   getWinnerAnimationDurationMs,
@@ -29,8 +31,10 @@ import { clearRoomCredentials, createRoomCredentials, loadRoomCredentials, saveR
 import { buildRemoteControlUrl, clearRemoteControlCredentials, createRemoteControlCredentials, isHostReadyForRemoteDraw, loadRemoteControlCredentials, saveRemoteControlCredentials } from '../utils/remoteControl';
 import { getTypographyProps } from '../utils/typography';
 import LetterGlitch from './LetterGlitch';
+import DrawDisplay from './DrawDisplay';
 import GrandFinale from './GrandFinale';
 import WinnerCarousel from './WinnerCarousel';
+import { buildWinnerSlides } from '../utils/winnerCarousel';
 import AboutPanel from './AboutPanel';
 import { updatePrizeName } from '../utils/prizes';
 import { selectRandomEntries } from '../utils/secureRandom';
@@ -96,7 +100,8 @@ export default function HostView() {
   const [remainingEntries, setRemainingEntries] = useState(Array.from({ length: 50 }, (_, i) => String(i + 1).padStart(2, '0')));
   const [inputValue, setInputValue] = useState("1-50");
   const [displayValue, setDisplayValue] = useState("01");
-  const [publicDisplayValue, setPublicDisplayValue] = useState("01");
+  const [lockedDigits, setLockedDigits] = useState('');
+  const [publicDisplay, setPublicDisplay] = useState({ value: '01', lockedDigits: '' });
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [prizes, setPrizes] = useState([
@@ -107,7 +112,6 @@ export default function HostView() {
   const [winnersPerPrize, setWinnersPerPrize] = useState(1);
   const [drawMode, setDrawMode] = useState('numbers');
   const [scriptsLoaded, setScriptsLoaded] = useState({ tone: false });
-  const [pulse, setPulse] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [winnerToExport, setWinnerToExport] = useState(null);
   const [exportAllTrigger, setExportAllTrigger] = useState(false);
@@ -141,6 +145,7 @@ export default function HostView() {
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [duplicateGroups, setDuplicateGroups] = useState([]);
   const [blankEntriesRemoved, setBlankEntriesRemoved] = useState(0);
+  const [pendingImport, setPendingImport] = useState(null);
   const [participantSearch, setParticipantSearch] = useState('');
   const [operationMode, setOperationMode] = useState('standard');
   const [teamCount, setTeamCount] = useState(2);
@@ -157,6 +162,15 @@ export default function HostView() {
   const [remoteControl, setRemoteControl] = useState(() => loadRemoteControlCredentials());
   const [roomActionPending, setRoomActionPending] = useState(false);
   const [grandFinalePhase, setGrandFinalePhase] = useState('idle');
+  const [celebrationIndex, setCelebrationIndex] = useState(0);
+  const [celebrationPlaying, setCelebrationPlaying] = useState(true);
+  const celebrationSlideCount = useMemo(() => buildWinnerSlides(winnersHistory).length, [winnersHistory]);
+
+  useEffect(() => {
+    if (grandFinalePhase !== 'carousel' || !celebrationPlaying || celebrationSlideCount < 2) return undefined;
+    const timer = setTimeout(() => setCelebrationIndex((index) => (index + 1) % celebrationSlideCount), 5500);
+    return () => clearTimeout(timer);
+  }, [grandFinalePhase, celebrationPlaying, celebrationIndex, celebrationSlideCount]);
 
   // Refs
   const animationTimersRef = useRef(new Set());
@@ -167,6 +181,8 @@ export default function HostView() {
   const fileInputRef = useRef(null);
   const sessionInputRef = useRef(null);
   const csvInputRef = useRef(null);
+  const importPreviewRef = useRef(null);
+  const importRequestRef = useRef(0);
   const logoInputRef = useRef(null);
   const bgImageInputRef = useRef(null);
   const settingsButtonRef = useRef(null);
@@ -179,7 +195,7 @@ export default function HostView() {
   const drawLockRef = useRef(false);
   const audioStarted = useRef(false);
   const displayValueRef = useRef(displayValue);
-  const almostTriggered = useRef(false);
+  const lockedDigitsRef = useRef(lockedDigits);
   const sfxVolumeNode = useRef(null);
   const musicVolumeNode = useRef(null);
   const applauseFilterNode = useRef(null);
@@ -222,15 +238,24 @@ export default function HostView() {
     const blockedEntries = getNoRepeatSet(auditLog);
     return activeEntries.filter((entry) => !blockedEntries.has(entry)).length;
   }, [auditLog, initialEntries, noRepeatAcrossPrizes, operationMode, remainingEntries]);
+  const publicChargeProgress = Math.floor(charge / 10) * 10;
 
   const publicLiveState = useMemo(() => ({
     ...appState,
     drawing,
-    currentPrize: drawing || showConfetti || grandFinalePhase !== 'idle'
-      ? currentPrize
-      : prizes[winnersHistory.length]?.name || currentPrize,
-    publicDisplayValue,
+    isCharging,
+    chargeProgress: publicChargeProgress,
+    currentPrize: operationMode !== 'standard'
+      ? operationMode === 'team-divider' ? 'Team Divider' : 'Role Selector'
+      : drawing || showConfetti || grandFinalePhase !== 'idle'
+        ? currentPrize
+        : prizes[winnersHistory.length]?.name || currentPrize,
+    publicDisplayValue: publicDisplay.value,
+    lockedDigitCount: publicDisplay.lockedDigits.length,
+    lockedDigits: publicDisplay.lockedDigits,
     grandFinalePhase,
+    celebrationIndex,
+    celebrationPlaying,
     showConfetti,
     remoteControlReady: Boolean(remoteControl && liveRoom && remoteControl.roomId === liveRoom.roomId) && isHostReadyForRemoteDraw({
       drawing,
@@ -245,8 +270,8 @@ export default function HostView() {
     totalEntries: initialEntries.length,
     remainingEntriesCount: publicRemainingEntriesCount,
   }), [
-    appState, drawing, currentPrize, publicDisplayValue, grandFinalePhase,
-    showConfetti, isCharging, operationMode, winnersHistory.length,
+    appState, drawing, currentPrize, publicDisplay, grandFinalePhase, celebrationIndex, celebrationPlaying,
+    showConfetti, isCharging, publicChargeProgress, operationMode, winnersHistory.length,
     prizes, initialEntries.length, publicRemainingEntriesCount, liveRoom, remoteControl,
   ]);
 
@@ -415,14 +440,19 @@ export default function HostView() {
 
   useEffect(() => {
     displayValueRef.current = String(displayValue ?? '');
-    if (!drawing) setPublicDisplayValue(displayValueRef.current);
-  }, [displayValue, drawing]);
+    lockedDigitsRef.current = lockedDigits;
+    if (!drawing) setPublicDisplay({ value: displayValueRef.current, lockedDigits });
+  }, [displayValue, lockedDigits, drawing]);
 
   useEffect(() => {
     if (!drawing) return undefined;
-    setPublicDisplayValue(displayValueRef.current);
+    const updatePublicDisplay = () => setPublicDisplay({
+      value: displayValueRef.current,
+      lockedDigits: lockedDigitsRef.current,
+    });
+    updatePublicDisplay();
     const publicDisplayTimer = setInterval(() => {
-      setPublicDisplayValue(displayValueRef.current);
+      updatePublicDisplay();
     }, 300);
     return () => clearInterval(publicDisplayTimer);
   }, [drawing]);
@@ -476,6 +506,12 @@ export default function HostView() {
 
   useFinaleModeReset({ operationMode, finaleTimeoutRef, setGrandFinalePhase, setShowConfetti });
 
+  useEffect(() => {
+    if (!pendingImport) return;
+    importPreviewRef.current?.scrollIntoView?.({ block: 'nearest' });
+    importPreviewRef.current?.focus();
+  }, [pendingImport]);
+
   // Logic Functions
   const getPrizeName = () => {
     if (winnersHistory.length >= prizes.length) return "All prizes drawn!";
@@ -483,6 +519,8 @@ export default function HostView() {
   };
 
   const processEntries = (entries, { duplicateGroups: duplicates = [], blankCount = 0 } = {}) => {
+    importRequestRef.current += 1;
+    setPendingImport(null);
     if (entries.length > 0) {
         if (drawMode === 'numbers') {
             const maxLength = entries.reduce((max, entry) => Math.max(max, entry.length), 0);
@@ -520,6 +558,7 @@ export default function HostView() {
     setError('');
     setShowConfetti(false);
     setGrandFinalePhase('idle');
+    setCelebrationIndex(0);
     clearTimeout(finaleTimeoutRef.current);
     setLastAssignmentResult(null);
   };
@@ -546,6 +585,7 @@ export default function HostView() {
     setError('');
     setShowConfetti(false);
     setGrandFinalePhase('idle');
+    setCelebrationIndex(0);
     clearTimeout(finaleTimeoutRef.current);
   };
 
@@ -800,56 +840,64 @@ export default function HostView() {
     e.target.value = null;
   };
   
+  const stageFileImport = (file, parse) => {
+    const requestId = ++importRequestRef.current;
+    const importMode = drawMode;
+    setPendingImport(null);
+    setError('');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (requestId !== importRequestRef.current) return;
+      const parsed = parse(event.target.result, importMode);
+      if (parsed.error) {
+        setError(parsed.error);
+        return;
+      }
+      if (!parsed.entries.length) {
+        setError('The file does not contain valid entries.');
+        return;
+      }
+      if (parsed.entries.length > MAX_ENTRIES) {
+        setError(`Too many entries. Please provide ${MAX_ENTRIES.toLocaleString()} or less.`);
+        return;
+      }
+      setPendingImport({
+        fileName: file.name,
+        drawMode: importMode,
+        entries: parsed.entries,
+        duplicateGroups: parsed.duplicateGroups,
+        blankCount: parsed.blankCount,
+        headerSkipped: parsed.headerSkipped,
+        ignoredColumns: parsed.ignoredColumns,
+      });
+    };
+    reader.onerror = () => {
+      if (requestId === importRequestRef.current) setError('Could not read the file. Please try again.');
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmFileImport = () => {
+    if (!pendingImport || drawing || pendingImport.drawMode !== drawMode) return;
+    const { entries, duplicateGroups, blankCount } = pendingImport;
+    setInputValue(formatEntriesForInput(entries));
+    processEntries(entries, { duplicateGroups, blankCount });
+    setPendingImport(null);
+    setSuccessMessage(`${entries.length.toLocaleString()} participants imported.`);
+    setTimeout(() => setSuccessMessage(''), 4000);
+  };
+
   const handleFileImport = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        const parsed = parseEntries(event.target.result, drawMode);
-        if (parsed.error) {
-            setError(parsed.error);
-            return;
-        }
-
-        if (parsed.entries.length > MAX_ENTRIES) {
-            setError(`Too many entries. Please provide ${MAX_ENTRIES.toLocaleString()} or less.`);
-            return;
-        }
-
-        setInputValue(parsed.entries.join(', '));
-        processEntries(parsed.entries, { duplicateGroups: parsed.duplicateGroups, blankCount: parsed.blankCount });
-    };
-    reader.readAsText(file);
+    stageFileImport(file, parseEntries);
     e.target.value = null;
   };
 
   const handleCsvImport = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-
-    reader.onload = (event) => {
-      const parsed = parseEntriesFromCsv(event.target.result, drawMode);
-      if (parsed.error) {
-        setError(parsed.error);
-        return;
-      }
-
-      if (parsed.entries.length < 1) {
-        setError('CSV file does not contain valid entries.');
-        return;
-      }
-
-      if (parsed.entries.length > MAX_ENTRIES) {
-        setError(`Too many entries. Please provide ${MAX_ENTRIES.toLocaleString()} or less.`);
-        return;
-      }
-
-      setInputValue(parsed.entries.join(', '));
-      processEntries(parsed.entries, { duplicateGroups: parsed.duplicateGroups, blankCount: parsed.blankCount });
-    };
-
-    reader.readAsText(file);
+    stageFileImport(file, parseEntriesFromCsv);
     e.target.value = null;
   };
 
@@ -1031,12 +1079,16 @@ export default function HostView() {
     chargeLockRef.current = true;
 
     try {
+      setError('');
       await ensureAudioStarted();
     } catch (err) {
       chargeLockRef.current = false;
       setError('Audio could not start. Please try again.');
       return;
     }
+
+    // The pointer may have been released while the audio context was starting.
+    if (!chargeLockRef.current) return;
 
     clearInterval(chargeIntervalRef.current);
 
@@ -1074,6 +1126,7 @@ export default function HostView() {
 
   const runSingleWinnerAnimation = (winnerEntry, isFinalWinnerOfBatch) => {
     return new Promise((resolve) => {
+        setLockedDigits('');
         const isFinalPrize = isGrandPrizeDraw(winnersHistory.length, prizes.length);
         const isGrandFinal = isFinalPrize && isFinalWinnerOfBatch;
         const slowMoDuration = isGrandFinal
@@ -1118,7 +1171,8 @@ export default function HostView() {
                     finishAnimation();
                     return;
                 }
-                setDisplayValue(initialEntries[Math.floor(Math.random() * initialEntries.length)]);
+                const animationPool = getEligibleEntries(remainingEntries);
+                setDisplayValue(animationPool[Math.floor(Math.random() * animationPool.length)] || winnerEntry);
                 if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "8n");
                 const progress = elapsed / slowMoDuration;
                 const easing = 1 - Math.pow(1 - progress, 2);
@@ -1135,6 +1189,7 @@ export default function HostView() {
             );
 
             schedule(() => {
+                setLockedDigits(winnerDigits.join(''));
                 setDisplayValue(String(winnerEntry));
                 finishAnimation();
             }, animationTotalDuration + 5000);
@@ -1144,10 +1199,14 @@ export default function HostView() {
                 let nextDelay = 75;
 
                 if (elapsed >= animationTotalDuration + (isGrandFinal ? 700 : 300)) {
+                    setLockedDigits(winnerDigits.join(''));
                     setDisplayValue(winnerDigits.join(''));
                     finishAnimation();
                     return;
                 }
+
+                const lockedCount = getLockedDigitCount(reelConfigs, elapsed);
+                setLockedDigits(winnerDigits.slice(0, lockedCount).join(''));
 
                 const newDisplayDigits = winnerDigits.map((digit, index) => {
                     const reel = reelConfigs[index];
@@ -1157,27 +1216,8 @@ export default function HostView() {
                     const reelElapsed = elapsed - reel.start;
                     if (reelElapsed >= reel.duration) return digit;
 
-                    const progress = reelElapsed / reel.duration;
-                    const easing = 1 - Math.pow(1 - progress, 3);
-                    const totalSteps = isGrandFinal ? 24 : 14;
-                    const currentStep = Math.floor(easing * totalSteps);
-                    const finalDigit = parseInt(digit, 10);
-                    return Number.isNaN(finalDigit)
-                        ? digit
-                        : (finalDigit + totalSteps - currentStep) % 10;
+                    return getSpinningDigit(digit, reelElapsed, reel.duration, isGrandFinal);
                 });
-
-                if (isGrandFinal && !almostTriggered.current && elapsed >= animationTotalDuration - 1100) {
-                    almostTriggered.current = true;
-                    const finalDigitIndex = maxDigits - 1;
-                    const finalDigit = parseInt(winnerDigits[finalDigitIndex], 10);
-                    if (!Number.isNaN(finalDigit)) {
-                        newDisplayDigits[finalDigitIndex] = (finalDigit + 1) % 10;
-                    }
-                    setDisplayValue(newDisplayDigits.join(''));
-                    schedule(animationLoop, 850);
-                    return;
-                }
 
                 setDisplayValue(newDisplayDigits.join(''));
                 if (tickSynth.current) tickSynth.current.triggerAttackRelease("C1", "16n");
@@ -1194,6 +1234,7 @@ export default function HostView() {
   const drawNextWinner = async () => {
     if (drawLockRef.current || drawing) return;
     drawLockRef.current = true;
+    stopCharging();
 
     try {
       await ensureAudioStarted();
@@ -1213,11 +1254,8 @@ export default function HostView() {
         setLastAssignmentResult({ mode: 'team-divider', teams });
         setCurrentPrize(`Team Divider (${teams.length} teams)`);
         setDrawing(true);
-        for (let i = 0; i < teams.length; i++) {
-          setDisplayValue(`${teams[i].teamName}: ${teams[i].members.join(', ')}`);
-          setPulse(true);
-          await new Promise((resolve) => setTimeout(resolve, i < teams.length - 1 ? 2500 : 900));
-        }
+        setDisplayValue('Balancing ' + teams.length + ' teams');
+        await new Promise((resolve) => setTimeout(resolve, 1600));
         return;
       }
 
@@ -1231,6 +1269,10 @@ export default function HostView() {
         setError(`Not enough eligible participants: ${requestedRoleCount} role slots requested for ${eligible.length} participants.`);
         return;
       }
+      if (allowMultipleRoles && roleRules.some((role) => role.count > eligible.length)) {
+        setError('A role cannot request more people than the eligible pool. Multiple roles allows one person in different roles, not duplicate slots in the same role.');
+        return;
+      }
       const assignments = assignRoles(eligible, roleRules, { allowMultipleRoles });
       const selected = assignments.flatMap((role) => role.participants);
       const remainingCount = noRepeatAcrossPrizes ? eligible.length - new Set(selected).size : eligible.length;
@@ -1238,11 +1280,8 @@ export default function HostView() {
       setLastAssignmentResult({ mode: 'role-selector', assignments });
       setCurrentPrize('Role Selector');
       setDrawing(true);
-      for (let i = 0; i < assignments.length; i++) {
-        setDisplayValue(`${assignments[i].role}: ${assignments[i].participants.join(', ')}`);
-        setPulse(true);
-        await new Promise((resolve) => setTimeout(resolve, i < assignments.length - 1 ? 2500 : 900));
-      }
+      setDisplayValue('Assigning ' + assignments.length + ' roles');
+      await new Promise((resolve) => setTimeout(resolve, 1600));
       return;
     }
 
@@ -1259,8 +1298,6 @@ export default function HostView() {
     clearTimeout(finaleTimeoutRef.current);
     stopCelebrationAudio();
     setShowConfetti(false);
-    setPulse(true);
-    almostTriggered.current = false;
 
     const currentPrizeName = getPrizeName();
     const isGrandPrize = isGrandPrizeDraw(winnersHistory.length, prizes.length);
@@ -1308,6 +1345,8 @@ export default function HostView() {
       playGrandFinaleReveal();
       finaleTimeoutRef.current = setTimeout(() => {
         setShowConfetti(false);
+        setCelebrationIndex(0);
+        setCelebrationPlaying(true);
         setGrandFinalePhase('carousel');
       }, 9000);
     } else {
@@ -1340,7 +1379,7 @@ export default function HostView() {
         setGrandFinalePhase('idle');
         return;
       }
-      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
+      if (event.repeat || event.target.closest?.('input, textarea, select, button, a, [contenteditable="true"], [role="button"]')) return;
       if (event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar') {
         event.preventDefault();
         drawActionRef.current();
@@ -1456,34 +1495,14 @@ export default function HostView() {
       ? operationMode === 'standard' ? 'Ready for next draw' : 'Ready to run assignment'
       : eligibleEntryCount === 0 ? 'No eligible entries' : 'Draw completed';
 
-  // Auto-expand display box for names in Standard Draw Mode
-  const isStandardNames = operationMode === 'standard' && drawMode === 'names';
-  const displayBoxComputedWidth = isStandardNames
-    ? `min(${Math.max(displayBoxWidth, 640)}px, 95vw)`
-    : `min(${displayBoxWidth}px, 95vw)`;
-  const maxNameFontRem = Math.max(38, displayFontSize * 0.7) / 16;
-  const nameLen = isStandardNames ? (displayValue || '').length : 0;
-  const scaledNameFontRem = isStandardNames && nameLen > 0
-    ? Math.min(maxNameFontRem, Math.max(1.5, 5 / Math.max(nameLen / 8, 1)))
-    : maxNameFontRem;
-  const displayNameFontSize = isStandardNames
-    ? `clamp(1.5rem, ${scaledNameFontRem}rem, 6rem)`
-    : `clamp(2rem, ${maxNameFontRem}rem, 6rem)`;
-  const numberFontRem = Math.min(displayFontSize, Math.max(28, (displayBoxWidth - 48) / Math.max(maxDigits, 1))) / 16;
-  const numberViewportMax = Math.min(24, 80 / Math.max(maxDigits, 1));
-  const displayNumberFontSize = `clamp(1.75rem, ${numberFontRem}rem, ${numberViewportMax}vw)`;
+  const displayBoxComputedWidth = operationMode !== 'standard' || drawMode === 'names'
+    ? Math.max(displayBoxWidth, 640) : Math.max(displayBoxWidth, 480);
   const assignmentResultMatchesMode = lastAssignmentResult?.mode === operationMode;
-  const assignmentGroups = assignmentResultMatchesMode
-    ? lastAssignmentResult.mode === 'team-divider'
-      ? lastAssignmentResult.teams.map((team) => ({ label: team.teamName, members: team.members }))
-      : lastAssignmentResult.assignments.map((assignment) => ({ label: assignment.role, members: assignment.participants }))
-    : [];
   const mainDisplayValue = operationMode === 'standard' || drawing || assignmentResultMatchesMode
     ? displayValue
     : 'Ready';
   const titleTypography = getTypographyProps(title, titleFont, titleLetterSpacing);
   const subtitleTypography = getTypographyProps(subtitle, subtitleFont, subtitleLetterSpacing);
-  const displayTypography = getTypographyProps(String(mainDisplayValue ?? ''), displayFont, displayLetterSpacing);
   const shapedTitle = (value) => getTypographyProps(String(value ?? ''), titleFont, 0);
   const shapedDisplay = (value) => getTypographyProps(String(value ?? ''), displayFont, 0);
   const mainStyle = {
@@ -1498,7 +1517,7 @@ export default function HostView() {
   const activeSettingsSection = SETTINGS_SECTIONS.find((section) => section.id === settingsTab) || SETTINGS_SECTIONS[0];
 
   return (
-    <div style={mainStyle} className="app-viewport relative flex flex-col items-center justify-center text-[var(--text-color)] p-4 pb-20 sm:pb-4 gap-3 sm:gap-6 font-sans overflow-hidden transition-all duration-500 bg-[var(--bg-color)]">
+    <div style={mainStyle} className="app-viewport relative flex flex-col items-center justify-center text-[var(--text-color)] p-4 pt-20 pb-28 sm:pt-36 sm:pb-8 gap-3 sm:gap-6 font-sans overflow-x-hidden bg-[var(--bg-color)]">
       {showLetterGlitch && (
         <div className="pointer-events-none fixed inset-0 z-0">
           <LetterGlitch
@@ -1508,7 +1527,7 @@ export default function HostView() {
             outerVignette={false}
             smooth
           />
-          <div className="absolute inset-0 bg-black/60" />
+          <div className="absolute inset-0 bg-black/85" />
         </div>
       )}
       <AnimatePresence>
@@ -1527,6 +1546,17 @@ export default function HostView() {
             displayFont={displayFont}
             logo={logo}
             backgroundImage={backgroundImage}
+            activeIndex={celebrationIndex}
+            playing={celebrationPlaying}
+            onPrevious={() => {
+              setCelebrationPlaying(false);
+              setCelebrationIndex((index) => (index - 1 + celebrationSlideCount) % celebrationSlideCount);
+            }}
+            onNext={() => {
+              setCelebrationPlaying(false);
+              setCelebrationIndex((index) => (index + 1) % celebrationSlideCount);
+            }}
+            onTogglePlayback={() => setCelebrationPlaying((playing) => !playing)}
             onClose={() => setGrandFinalePhase('idle')}
           />
         )}
@@ -1749,7 +1779,7 @@ export default function HostView() {
                             </div>
                             <div>
                                 <label className="font-semibold text-sm mb-1 block">Participant Type</label>
-                                <select value={drawMode} onChange={(e) => setDrawMode(e.target.value)} disabled={drawing} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm mb-2 disabled:opacity-50">
+                                <select value={drawMode} onChange={(e) => { importRequestRef.current += 1; setPendingImport(null); setDrawMode(e.target.value); }} disabled={drawing} className="w-full p-2 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-sm mb-2 disabled:opacity-50">
                                     <option value="numbers">Numbers</option>
                                     <option value="names">Names</option>
                                 </select>
@@ -1765,6 +1795,27 @@ export default function HostView() {
                                 </div>
                                 <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".txt" className="hidden" />
                                 <input type="file" ref={csvInputRef} onChange={handleCsvImport} accept=".csv,text/csv" className="hidden" />
+
+                                {pendingImport && (
+                                  <section ref={importPreviewRef} tabIndex={-1} aria-labelledby="import-preview-title" className="mt-3 rounded-xl border border-[var(--button-action-bg)] bg-[var(--panel-bg)] p-4 outline-none focus-visible:ring-2 focus-visible:ring-[var(--button-action-bg)]">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Review import · {pendingImport.fileName}</p>
+                                    <h3 id="import-preview-title" className="mt-1 text-lg font-black text-[var(--title-color)]">{pendingImport.entries.length.toLocaleString()} {pendingImport.drawMode === 'numbers' ? 'tickets' : 'names'} ready</h3>
+                                    <p className="mt-1 text-sm text-[var(--text-muted)]">This will replace the current {initialEntries.length.toLocaleString()} participants and reset draw history.</p>
+                                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                                      <div className="rounded-lg border border-[var(--panel-border)] p-2"><strong>{pendingImport.duplicateGroups.reduce((count, group) => count + group.removed.length, 0).toLocaleString()}</strong><span className="ml-1 text-[var(--text-muted)]">duplicates removed</span></div>
+                                      <div className="rounded-lg border border-[var(--panel-border)] p-2"><strong>{pendingImport.blankCount.toLocaleString()}</strong><span className="ml-1 text-[var(--text-muted)]">blank cells skipped</span></div>
+                                    </div>
+                                    {pendingImport.headerSkipped && <p className="mt-2 text-xs text-[var(--text-muted)]">Using the “{pendingImport.headerSkipped}” column. Header skipped{pendingImport.ignoredColumns ? `; ${pendingImport.ignoredColumns} other ${pendingImport.ignoredColumns === 1 ? 'column' : 'columns'} ignored` : ''}.</p>}
+                                    <p className="mt-3 text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">First {Math.min(10, pendingImport.entries.length)} entries</p>
+                                    <ol className="mt-1 max-h-28 list-inside list-decimal overflow-y-auto rounded-lg border border-[var(--panel-border)] p-2 text-sm">
+                                      {pendingImport.entries.slice(0, 10).map((entry, index) => <li key={`${entry}-${index}`} className="truncate py-0.5">{entry}</li>)}
+                                    </ol>
+                                    <div className="mt-4 flex gap-2">
+                                      <Button onClick={confirmFileImport} disabled={drawing} className="flex-1 !bg-[var(--button-action-bg)] !text-black">Replace participants</Button>
+                                      <Button onClick={() => setPendingImport(null)} className="!bg-[var(--input-bg)] !text-[var(--text-color)]">Cancel</Button>
+                                    </div>
+                                  </section>
+                                )}
 
                                 <div className="theme-input-soft mt-3 p-3 rounded-lg border border-[var(--panel-border)]">
                                     <div className="flex items-center justify-between mb-2">
@@ -2040,91 +2091,13 @@ export default function HostView() {
         <p lang={subtitleTypography.lang} className="mt-2 break-words" style={{...subtitleTypography.style, color: subtitleColor || 'var(--text-muted)', lineHeight: subtitleLineSpacing, fontSize: `clamp(0.875rem, ${subtitleFontSize}px, 6vw)`}}>{subtitle}</p>
       </div>
 
-      <div className="flex flex-col items-center z-20">
-        <AnimatePresence>
-            {isGrandFinaleActive ? (
-                <motion.div
-                  key="grand-prize-heading"
-                  initial={{ opacity: 0, scale: 0.7, y: -20 }}
-                  animate={{ opacity: 1, scale: isGrandFinaleReveal ? [1, 1.08, 1] : 1, y: 0 }}
-                  exit={{ opacity: 0, y: 20 }}
-                  transition={{ scale: { duration: 0.85, repeat: isGrandFinaleReveal ? Infinity : 0 } }}
-                  className="mb-3 rounded-full border border-yellow-300/70 bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500 px-5 py-2 text-sm sm:text-lg font-black uppercase tracking-[0.2em] text-slate-950 shadow-[0_0_30px_rgba(250,204,21,0.65)]"
-                >
-                  {isGrandFinaleReveal ? 'Grand Prize Winner' : `Grand Prize Finale · ${currentPrize}`}
-                </motion.div>
-            ) : drawing && (
-                <motion.div key="standard-draw-heading" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="text-2xl font-bold mb-2" style={{color: 'var(--title-color)'}}>
-                    Now Drawing: {currentPrize}
-                </motion.div>
-            )}
-        </AnimatePresence>
-        <motion.div
-            ref={displayRef}
-            className={`relative rounded-2xl shadow-inner flex items-center justify-center p-4 border-4 ${isGrandFinaleActive ? 'overflow-visible' : ''}`}
-            style={{
-                backgroundColor: 'var(--display-bg)',
-                borderColor: isGrandFinaleActive ? '#fde047' : 'var(--display-border)',
-                width: displayBoxComputedWidth,
-                minHeight: `${displayBoxHeight}px`,
-                height: 'auto',
-                maxHeight: 'min(45vh, 360px)',
-                overflowY: isGrandFinaleActive ? 'visible' : 'hidden',
-            }}
-            animate={isGrandFinaleReveal
-              ? { scale: [1, 1.06, 1.02], boxShadow: ['0 0 25px rgba(250,204,21,0.4)', '0 0 100px rgba(250,204,21,0.95)', '0 0 55px rgba(250,204,21,0.72)'] }
-              : isGrandFinaleActive
-                ? { scale: [1, 1.015, 1], boxShadow: ['0 0 18px rgba(250,204,21,0.3)', '0 0 55px rgba(250,204,21,0.68)', '0 0 18px rgba(250,204,21,0.3)'] }
-                : pulse ? {boxShadow: ['0 0 0px #fff', '0 0 40px #fff', '0 0 0px #fff']} : {}}
-            transition={isGrandFinaleReveal
-              ? { duration: 1.25, ease: 'easeOut' }
-              : isGrandFinaleActive
-                ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' }
-                : pulse ? {duration: 0.8, ease: 'easeInOut'} : {}}
-            onAnimationComplete={() => setPulse(false)}
-        >
-            {isGrandFinaleActive && (
-              <motion.div
-                className="pointer-events-none absolute -inset-3 rounded-[1.5rem] border border-yellow-200/60"
-                animate={{ opacity: [0.3, 1, 0.3], scale: [0.98, 1.03, 0.98] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-              />
-            )}
-            {assignmentResultMatchesMode && !drawing ? (
-                <div className="grid max-h-[min(42vh,320px)] w-full grid-cols-1 gap-3 overflow-y-auto p-1 sm:grid-cols-2">
-                  {assignmentGroups.map((group, groupIndex) => (
-                    <section key={`${group.label}-${groupIndex}`} className="rounded-xl border border-[var(--display-border)] bg-white/5 p-3 text-left">
-                      <h3 className="border-b border-[var(--display-border)] pb-2 text-base font-black" style={{ color: 'var(--display-text)' }}>{group.label}</h3>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {group.members.map((member, memberIndex) => (
-                          <span key={`${member}-${memberIndex}`} className="rounded-lg bg-black/15 px-2.5 py-1 text-sm font-semibold break-all" style={{ color: 'var(--display-text)' }}>{member}</span>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-            ) : operationMode === 'standard' && drawMode === 'numbers' ? (
-                <div lang={displayTypography.lang} className="flex items-center font-bold max-w-full" style={{...displayTypography.style, color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontSize: displayNumberFontSize, lineHeight: displayLineHeight, fontVariantNumeric: 'tabular-nums lining-nums'}}>
-                    {getDigits(displayValue).map((digit, index) => (
-                        <div key={index} className="w-[1ch] text-center overflow-hidden">
-                            <AnimatePresence mode="popLayout">
-                                <motion.span key={digit + '-' + index} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
-                                    {digit === ' ' ? '\u00A0' : digit}
-                                </motion.span>
-                            </AnimatePresence>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                 <div lang={displayTypography.lang} className="font-bold px-4 text-center w-full" style={{...displayTypography.style, color: 'var(--display-text)', textShadow: `0 0 20px ${currentTheme['--display-shadow']}`, fontSize: displayNameFontSize, lineHeight: displayLineHeight, wordBreak: 'break-word', overflowWrap: 'break-word'}}>
-                    <AnimatePresence mode="popLayout">
-                        <motion.span key={displayValue} initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} transition={{ duration: 0.2 }}>
-                            {mainDisplayValue}
-                        </motion.span>
-                    </AnimatePresence>
-                </div>
-            )}
-        </motion.div>
+      <div ref={displayRef} className="relative z-20 w-full min-w-0" style={{ maxWidth: displayBoxComputedWidth }}>
+        <DrawDisplay value={mainDisplayValue} drawing={drawing} charging={isCharging} chargeProgress={charge} mode={operationMode}
+          drawMode={drawMode} maxDigits={maxDigits} lockedDigits={lockedDigits} result={lastAssignmentResult}
+          revealed={operationMode === 'standard' && winnersHistory.length > 0}
+          finale={isGrandFinaleActive} context={drawing || showConfetti ? currentPrize : ''}
+          fontFamily={displayFont} fontSize={displayFontSize} lineHeight={displayLineHeight}
+          letterSpacing={displayLetterSpacing} minHeight={displayBoxHeight} />
       </div>
 
       <div className="flex flex-col items-center gap-2 z-20">
@@ -2135,37 +2108,34 @@ export default function HostView() {
         </div>
         <div className="text-sm" style={{color: 'var(--text-muted)'}}>{eligibleEntryCount} / {initialEntries.length} Entries Eligible</div>
         <div className="relative w-full max-w-xs mt-2">
-            <AnimatePresence>
-            {isCharging && (
-                <motion.div
-                    className="absolute bottom-full left-0 right-0 mb-2 h-4 rounded-full"
-                    style={{backgroundColor: 'var(--panel-border)'}}
-                    initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}
-                >
-                    <motion.div 
-                        className="h-4 rounded-full"
-                        style={{backgroundColor: 'var(--button-action-bg)'}}
-                        initial={{width: 0}}
-                        animate={{width: `${charge}%`}}
-                        transition={{duration: 0.1, ease: 'linear'}}
-                    />
-                </motion.div>
-            )}
-            </AnimatePresence>
             <Button 
                 onPointerDown={operationMode === 'standard' ? startCharging : undefined}
                 onPointerUp={operationMode === 'standard' ? stopCharging : undefined}
                 onPointerLeave={operationMode === 'standard' ? stopCharging : undefined}
                 onPointerCancel={operationMode === 'standard' ? stopCharging : undefined}
                 onContextMenu={(event) => event.preventDefault()}
-                onClick={operationMode === 'standard' ? undefined : drawNextWinner}
+                onClick={operationMode === 'standard' ? (event) => { if (event.detail === 0) drawNextWinner(); } : drawNextWinner}
                 disabled={!canDraw}
-                className="w-full px-6 py-3 sm:px-10 sm:py-4 text-base sm:text-xl text-black" 
+                className="relative w-full overflow-hidden px-6 py-3 sm:px-10 sm:py-4 text-base sm:text-xl text-black"
                 style={{backgroundColor: 'var(--button-action-bg)', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'}}
             >
-              {operationMode === 'standard' ? (isCharging ? "Charging..." : "Hold to Draw") : 'Run Assignment'}
+              {operationMode === 'standard' && isCharging && <span role="progressbar" aria-label="Draw charge" aria-valuemin={0} aria-valuemax={100} aria-valuenow={charge} className="pointer-events-none absolute inset-y-0 left-0 bg-white/30 transition-[width] duration-75" style={{ width: `${charge}%` }} />}
+              <span className="relative">{operationMode === 'standard' ? (isCharging ? `Charging ${charge}%` : 'Hold to Draw') : 'Run Assignment'}</span>
             </Button>
         </div>
+        {operationMode === 'standard' && winnersHistory.length === prizes.length && celebrationSlideCount > 0 && grandFinalePhase === 'idle' && (
+          <button
+            type="button"
+            onClick={() => {
+              setCelebrationIndex(0);
+              setCelebrationPlaying(true);
+              setGrandFinalePhase('carousel');
+            }}
+            className="mt-1 min-h-11 border border-[#b58c50] bg-[#17140f] px-5 py-2 text-sm font-bold text-[#f3d9a7] transition-colors hover:bg-[#342818] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8c78f]"
+          >
+            Show winner celebration again
+          </button>
+        )}
       </div>
       
       {!historyPanelOpen && (

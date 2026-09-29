@@ -7,8 +7,8 @@ export const Button = ({ children, className, ...props }) => (
   </button>
 );
 
-export const Input = (props) => (
-  <input className="border rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-[var(--button-primary-bg)] focus:outline-none shadow-sm" {...props} />
+export const Input = ({ className = '', ...props }) => (
+  <input className={`border rounded-lg px-3 py-2 w-full focus:ring-2 focus:ring-[var(--button-primary-bg)] focus:outline-none shadow-sm ${className}`} {...props} />
 );
 
 export const ConfettiParticle = ({ colors, grand = false, ...props }) => {

@@ -1,4 +1,3 @@
-const CSV_SPLIT_REGEX = /[\n,]+/;
 export const MAX_ENTRIES = 70000;
 
 const collapseWhitespace = (value) => value.replace(/\s+/g, ' ').trim();
@@ -9,19 +8,30 @@ const getDedupKey = (value, drawMode) => {
 };
 
 export function parseMixedParticipants(inputValue = '') {
-  return inputValue
-    .split(CSV_SPLIT_REGEX)
-    .map((part) => part.trim());
+  return parseCsvParticipants(inputValue);
+}
+
+export function formatEntriesForInput(entries = []) {
+  return entries.map((entry) => {
+    const value = String(entry);
+    return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  }).join(', ');
 }
 
 export function parseCsvParticipants(csvText = '') {
-  const entries = [];
+  return parseCsvRows(csvText).flat();
+}
+
+function parseCsvRows(csvText = '') {
+  const source = csvText.replace(/^\uFEFF/, '');
+  const rows = [];
+  let row = [];
   let current = '';
   let inQuotes = false;
 
-  for (let i = 0; i < csvText.length; i += 1) {
-    const char = csvText[i];
-    const nextChar = csvText[i + 1];
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    const nextChar = source[i + 1];
 
     if (char === '"') {
       if (inQuotes && nextChar === '"') {
@@ -34,9 +44,12 @@ export function parseCsvParticipants(csvText = '') {
     }
 
     if (!inQuotes && (char === ',' || char === '\n' || char === '\r')) {
-      entries.push(current.trim());
+      row.push(current.trim());
       current = '';
 
+      if (char === ',') continue;
+      rows.push(row);
+      row = [];
       if (char === '\r' && nextChar === '\n') {
         i += 1;
       }
@@ -46,8 +59,11 @@ export function parseCsvParticipants(csvText = '') {
     current += char;
   }
 
-  entries.push(current.trim());
-  return entries;
+  if (row.length || current || !/[\r\n]$/.test(source)) {
+    row.push(current.trim());
+    rows.push(row);
+  }
+  return rows;
 }
 
 export function normalizeEntries(rawEntries = [], drawMode = 'numbers') {
@@ -137,8 +153,22 @@ export function parseEntries(inputValue, drawMode) {
 }
 
 export function parseEntriesFromCsv(csvText, drawMode) {
-  const rawEntries = parseCsvParticipants(csvText);
-  return normalizeAndValidateEntries(rawEntries, drawMode);
+  const rows = parseCsvRows(csvText);
+  const headers = drawMode === 'numbers'
+    ? ['number', 'numbers', 'ticket', 'tickets', 'ticket number', 'ticket_number', 'id']
+    : ['name', 'names', 'participant', 'participants', 'participant name', 'full name'];
+  const headerColumn = rows.length > 1
+    ? rows[0].findIndex((cell) => headers.includes(cell.toLocaleLowerCase()))
+    : -1;
+  const headerSkipped = headerColumn >= 0 ? rows[0][headerColumn] : null;
+  const rawEntries = headerColumn >= 0
+    ? rows.slice(1).map((row) => row[headerColumn] ?? '')
+    : rows.flat();
+  return {
+    ...normalizeAndValidateEntries(rawEntries, drawMode),
+    headerSkipped,
+    ignoredColumns: headerColumn >= 0 ? Math.max(0, rows[0].length - 1) : 0,
+  };
 }
 
 function normalizeAndValidateEntries(rawEntries, drawMode) {

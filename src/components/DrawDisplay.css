@@ -1,0 +1,49 @@
+.draw-console {
+  --stage-ink: var(--display-text);
+  width: 100%;
+  min-width: 0;
+  color: var(--stage-ink);
+  background: var(--display-bg);
+  border: 1px solid var(--display-border);
+  border-radius: 8px;
+  overflow: hidden;
+  text-shadow: none;
+  container-type: inline-size;
+}
+.draw-console__header, .draw-console__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; }
+.draw-console__header { border-bottom: 1px solid color-mix(in srgb, var(--stage-ink) 20%, transparent); }
+.draw-console__mode, .draw-console__signal, .draw-console__caption, .draw-console__index { font-family: 'Roboto Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+.draw-console__signal { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.draw-console__signal i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .4; }
+.draw-console[data-phase='live'] .draw-console__signal i { opacity: 1; animation: draw-signal 1s ease-in-out infinite; }
+.draw-console[data-phase='charging'] .draw-console__signal i { opacity: 1; animation: draw-signal 1s ease-in-out infinite; }
+.draw-console__context { margin: 16px 20px 0; text-align: center; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.draw-console__viewport { position: relative; display: flex; align-items: center; justify-content: center; min-height: var(--stage-height); padding: 24px 16px; overflow: hidden; }
+.draw-console__digits { display: flex; justify-content: center; gap: 3px; width: 100%; font-size: min(var(--stage-size), calc(70vw / var(--digit-count))); font-size: min(var(--stage-size), calc(115cqw / var(--digit-count))); font-weight: 800; font-variant-numeric: tabular-nums lining-nums; letter-spacing: 0 !important; }
+.draw-console__reel { position: relative; flex: 0 1 .85em; height: 1em; min-width: 0; text-align: center; overflow: hidden; border-bottom: 2px solid color-mix(in srgb, var(--stage-ink) 24%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--stage-ink) 5%, transparent), transparent); }
+.draw-console__reel::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(to bottom, var(--display-bg), transparent 18%, transparent 82%, var(--display-bg)); }
+.draw-console__wheel-number { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; line-height: 1; }
+.draw-console__reel--static { display: flex; align-items: center; justify-content: center; line-height: 1; }
+.draw-console[data-phase='result'] .draw-console__reel { border-color: currentColor; }
+.draw-console__name { width: 100%; text-align: center; font-size: min(var(--stage-size), 9vw); font-size: min(var(--stage-size), 8cqw); font-weight: 800; overflow-wrap: anywhere; }
+.draw-console__scan { display: none; pointer-events: none; position: absolute; left: 0; top: 0; bottom: 0; width: 20%; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--stage-ink) 8%, transparent), transparent); }
+.draw-console[data-phase='live'] .draw-console__scan { display: block; animation: draw-scan 2s linear infinite; }
+.draw-console__footer { border-top: 1px solid color-mix(in srgb, var(--stage-ink) 20%, transparent); }
+.draw-console__caption { text-align: right; letter-spacing: .035em; }
+.draw-console__meter { display: flex; align-items: flex-end; gap: 3px; height: 18px; flex-shrink: 0; }
+.draw-console__meter i { width: 3px; height: 5px; background: currentColor; opacity: .4; transform-origin: bottom; }
+.draw-console[data-phase='live'] .draw-console__meter i { height: 17px; animation: draw-meter .65s ease-in-out infinite alternate; animation-delay: calc(var(--bar) * -93ms); }
+.draw-console[data-phase='charging'] .draw-console__meter i.is-filled { height: 17px; opacity: 1; }
+.draw-console[data-phase='result'] .draw-console__meter i { height: 12px; opacity: 1; }
+.draw-console__groups { max-height: min(48vh, 460px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; }
+.draw-console__group { min-width: 0; text-align: left; }
+.draw-console__group h3 { display: flex; align-items: baseline; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--display-border); font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+.draw-console__group h3 > span:nth-child(2) { min-width: 0; flex: 1; }
+.draw-console__group small { font-size: 11px; }
+.draw-console__group ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.draw-console__group li { padding: 7px 0; font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; border-bottom: 1px solid color-mix(in srgb, var(--stage-ink) 8%, transparent); }
+@keyframes draw-scan { from { transform: translateX(-100%); } to { transform: translateX(600%); } }
+@keyframes draw-meter { from { transform: scaleY(.2); opacity: .4; } to { transform: scaleY(1); opacity: 1; } }
+@keyframes draw-signal { 50% { opacity: .35; } }
+@media (max-width: 480px) { .draw-console__header, .draw-console__footer { padding: 12px; gap: 8px; } .draw-console__mode, .draw-console__signal, .draw-console__caption { font-size: 9px; } .draw-console__meter { gap: 2px; } .draw-console__meter i { width: 2px; } }
+@media (prefers-reduced-motion: reduce) { .draw-console *, .draw-console *::before { animation: none !important; transition: none !important; } .draw-console__scan { display: none !important; } }

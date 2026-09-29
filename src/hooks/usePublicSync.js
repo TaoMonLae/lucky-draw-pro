@@ -60,16 +60,25 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
     }
 
     let cancelled = false;
+    let roomClosed = false;
     setDrawState(null);
     setSyncStatus('connecting');
     setErrorMessage('');
 
     const acceptRemoteState = (state) => {
-      if (!cancelled && isValidPublicDrawState(state)) setDrawState(state);
+      if (cancelled || roomClosed || !isValidPublicDrawState(state)) return;
+      setDrawState((currentState) => {
+        if (isValidPublicDrawState(currentState)
+          && Date.parse(currentState.updatedAt) >= Date.parse(state.updatedAt)) {
+          return currentState;
+        }
+        return state;
+      });
     };
 
     const handleRoomClosed = (payload) => {
       if (!cancelled && payload.old?.room_id === roomId) {
+        roomClosed = true;
         setDrawState(null);
         setSyncStatus('closed');
         setErrorMessage('The host stopped sharing this room. Ask for a new public link.');
@@ -114,6 +123,7 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
         if (status === 'SUBSCRIBED') {
           setSyncStatus('live');
           fetchLatestState().catch((error) => {
+            if (cancelled || roomClosed) return;
             console.error('Failed to load live draw state', error);
             setSyncStatus('error');
             setErrorMessage(error.message || 'Could not load live draw state.');

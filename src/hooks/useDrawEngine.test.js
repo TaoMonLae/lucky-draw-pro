@@ -1,7 +1,9 @@
 import {
   GRAND_FINALE_DRAW_DURATION_MS,
+  getLockedDigitCount,
   getNumericReelConfigs,
   getPaddedDigits,
+  getSpinningDigit,
   getWinnerAnimationDurationMs,
   isGrandPrizeDraw,
 } from './useDrawEngine';
@@ -40,7 +42,26 @@ describe('draw engine helpers', () => {
     ]);
   });
 
-  test('accounts for the final suspense hold when sizing the audio build', () => {
+  test('locks the grand-prize digits in order, then all at the final deadline', () => {
+    const reels = getNumericReelConfigs(6, true);
+    const penultimateEnd = reels[4].start + reels[4].duration;
+
+    expect(getLockedDigitCount(reels, penultimateEnd)).toBe(5);
+    expect(getLockedDigitCount(reels, GRAND_FINALE_DRAW_DURATION_MS - 1)).toBe(5);
+    expect(getLockedDigitCount(reels, GRAND_FINALE_DRAW_DURATION_MS)).toBe(6);
+  });
+
+  test('never presents the winning digit as stationary before its reel locks', () => {
+    const duration = getNumericReelConfigs(4, true)[3].duration;
+    for (let elapsed = 0; elapsed < duration; elapsed += 100) {
+      expect(getSpinningDigit('4', elapsed, duration, true)).not.toBe(4);
+    }
+    expect(getSpinningDigit('4', duration - 261, duration, true))
+      .not.toBe(getSpinningDigit('4', duration - 1, duration, true));
+    expect(getSpinningDigit('4', duration, duration, true)).toBe(4);
+  });
+
+  test('accounts for the final result hold when sizing the audio build', () => {
     expect(getWinnerAnimationDurationMs({ drawMode: 'numbers', digitCount: 6, isGrandFinal: true }))
       .toBe(GRAND_FINALE_DRAW_DURATION_MS + 700);
     expect(getWinnerAnimationDurationMs({ drawMode: 'names', digitCount: 6, isGrandFinal: true }))

@@ -86,11 +86,19 @@ export function toPublicDrawState(appState) {
     lastAssignmentResult: appState.lastAssignmentResult || null,
     live: {
       drawing: Boolean(appState.drawing),
+      charging: Boolean(appState.isCharging),
+      chargeProgress: Math.max(0, Math.min(100, Math.round(safeNumber(appState.chargeProgress, 0)))),
       currentPrize: typeof appState.currentPrize === 'string' ? appState.currentPrize.slice(0, 200) : '',
       displayValue: typeof appState.publicDisplayValue === 'string' || typeof appState.publicDisplayValue === 'number'
         ? String(appState.publicDisplayValue).slice(0, 500)
         : '',
+      lockedDigitCount: Math.max(0, Math.min(10, Math.round(safeNumber(appState.lockedDigitCount, 0)))),
+      lockedDigits: typeof appState.lockedDigits === 'string' && /^\d{0,10}$/.test(appState.lockedDigits)
+        ? appState.lockedDigits
+        : '',
       grandFinalePhase: PUBLIC_FINALE_PHASES.includes(appState.grandFinalePhase) ? appState.grandFinalePhase : 'idle',
+      celebrationIndex: Math.max(0, Math.round(safeNumber(appState.celebrationIndex, 0))),
+      celebrationPlaying: appState.celebrationPlaying !== false,
       showConfetti: Boolean(appState.showConfetti),
       remoteControlReady: Boolean(appState.remoteControlReady),
       completedPrizeCount: Math.max(0, Math.round(safeNumber(appState.completedPrizeCount, 0))),
@@ -119,9 +127,15 @@ export function isValidPublicDrawState(value) {
     if (typeof value.backgroundImage !== 'string') return false;
     if (!value.live || typeof value.live !== 'object') return false;
     if (typeof value.live.drawing !== 'boolean' || typeof value.live.showConfetti !== 'boolean') return false;
+    if (value.live.charging !== undefined && typeof value.live.charging !== 'boolean') return false;
+    if (value.live.chargeProgress !== undefined && (!Number.isInteger(value.live.chargeProgress) || value.live.chargeProgress < 0 || value.live.chargeProgress > 100)) return false;
+    if (value.live.lockedDigitCount !== undefined && (!Number.isInteger(value.live.lockedDigitCount) || value.live.lockedDigitCount < 0 || value.live.lockedDigitCount > 10)) return false;
+    if (value.live.lockedDigits !== undefined && (typeof value.live.lockedDigits !== 'string' || !/^\d{0,10}$/.test(value.live.lockedDigits) || value.live.lockedDigits.length > (value.live.lockedDigitCount ?? 10))) return false;
     if (value.live.remoteControlReady !== undefined && typeof value.live.remoteControlReady !== 'boolean') return false;
     if (typeof value.live.currentPrize !== 'string' || typeof value.live.displayValue !== 'string') return false;
     if (!PUBLIC_FINALE_PHASES.includes(value.live.grandFinalePhase)) return false;
+    if (value.live.celebrationIndex !== undefined && (!Number.isInteger(value.live.celebrationIndex) || value.live.celebrationIndex < 0)) return false;
+    if (value.live.celebrationPlaying !== undefined && typeof value.live.celebrationPlaying !== 'boolean') return false;
     for (const field of ['completedPrizeCount', 'prizeCount', 'totalEntries', 'remainingEntriesCount']) {
       if (!Number.isInteger(value.live[field]) || value.live[field] < 0) return false;
     }

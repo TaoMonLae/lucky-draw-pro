@@ -1,0 +1,15 @@
+.grand-stage { position: fixed; inset: 0; z-index: 10; overflow: hidden; pointer-events: none; isolation: isolate; background: rgba(5, 6, 9, .68); }
+.grand-stage__wash { position: absolute; inset: 0; background: radial-gradient(ellipse 47% 36% at 50% 48%, rgba(220, 170, 92, .12), transparent 80%); }
+.grand-stage__beam { position: absolute; top: -12vh; width: min(62vw, 900px); height: 112vh; transform-origin: 50% 0; opacity: .58; background: linear-gradient(90deg, transparent 0%, rgba(255, 226, 163, .02) 22%, rgba(255, 231, 180, .23) 50%, rgba(255, 226, 163, .02) 78%, transparent 100%); clip-path: polygon(49% 0, 51% 0, 100% 100%, 0 100%); filter: blur(9px); mix-blend-mode: screen; will-change: transform; }
+.grand-stage__beam--left { left: -4vw; animation: grand-beam-left 5.8s ease-in-out infinite alternate; }
+.grand-stage__beam--right { right: -4vw; animation: grand-beam-right 5.8s ease-in-out infinite alternate; }
+.grand-stage--reveal .grand-stage__beam--left { animation: grand-beam-left-settle 1.4s cubic-bezier(.16, 1, .3, 1) forwards; }
+.grand-stage--reveal .grand-stage__beam--right { animation: grand-beam-right-settle 1.4s cubic-bezier(.16, 1, .3, 1) forwards; }
+.grand-stage__focus { position: absolute; width: min(78vw, 840px); height: min(48vh, 420px); top: 48%; left: 50%; transform: translate(-50%, -50%) scale(.75); opacity: .42; background: radial-gradient(ellipse at center, rgba(255, 232, 184, .31), rgba(199, 141, 64, .10) 39%, transparent 71%); filter: blur(18px); transition: opacity 1s ease, transform 1.4s cubic-bezier(.16, 1, .3, 1); }
+.grand-stage--reveal .grand-stage__focus { opacity: .9; transform: translate(-50%, -50%) scale(1); }
+.grand-stage__floor { position: absolute; left: 50%; bottom: -18vh; width: min(130vw, 1500px); height: 36vh; transform: translateX(-50%); background: radial-gradient(ellipse at center, rgba(214, 156, 78, .22), transparent 67%); filter: blur(22px); }
+@keyframes grand-beam-left { from { transform: rotate(-26deg); } to { transform: rotate(-4deg); } }
+@keyframes grand-beam-right { from { transform: rotate(26deg); } to { transform: rotate(4deg); } }
+@keyframes grand-beam-left-settle { from { transform: rotate(-17deg); } to { transform: rotate(-9deg); } }
+@keyframes grand-beam-right-settle { from { transform: rotate(17deg); } to { transform: rotate(9deg); } }
+@media (prefers-reduced-motion: reduce) { .grand-stage__beam { animation: none !important; will-change: auto; } .grand-stage__beam--left { transform: rotate(-9deg); } .grand-stage__beam--right { transform: rotate(9deg); } .grand-stage__focus { transition: opacity .25s ease; transform: translate(-50%, -50%) scale(1); } }

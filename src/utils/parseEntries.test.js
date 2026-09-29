@@ -1,4 +1,4 @@
-import { MAX_ENTRIES, normalizeEntries, parseEntries, parseEntriesFromCsv } from './parseEntries';
+import { MAX_ENTRIES, formatEntriesForInput, normalizeEntries, parseEntries, parseEntriesFromCsv } from './parseEntries';
 
 describe('parseEntries', () => {
   test('supports mixed commas and line breaks', () => {
@@ -91,6 +91,27 @@ describe('parseEntriesFromCsv', () => {
     expect(result.entries).toEqual(['Alice', 'Bob, Jr', 'Charlie', 'Dana']);
   });
 
+  test('skips a single-column header and ignores the final line break', () => {
+    const result = parseEntriesFromCsv('name\n"Ada, Lovelace"\nGrace Hopper\n\nKatherine Johnson\n', 'names');
+    expect(result.entries).toEqual(['Ada, Lovelace', 'Grace Hopper', 'Katherine Johnson']);
+    expect(result.headerSkipped).toBe('name');
+    expect(result.blankCount).toBe(1);
+  });
+
+  test('uses the named participant column in a multi-column export', () => {
+    const result = parseEntriesFromCsv('email,name,group\nada@example.com,"Ada, Lovelace",A\ngrace@example.com,Grace Hopper,B\n', 'names');
+    expect(result.entries).toEqual(['Ada, Lovelace', 'Grace Hopper']);
+    expect(result.headerSkipped).toBe('name');
+    expect(result.ignoredColumns).toBe(2);
+  });
+
+  test('skips a ticket column header before numeric validation', () => {
+    const result = parseEntriesFromCsv('\uFEFFticket number\r\n001\r\n002\r\n', 'numbers');
+    expect(result.entries).toEqual(['001', '002']);
+    expect(result.headerSkipped).toBe('ticket number');
+    expect(result.blankCount).toBe(0);
+  });
+
   test('normalizes csv duplicates', () => {
     const result = parseEntriesFromCsv('Alice,alice,ALICE', 'names');
     expect(result.entries).toEqual(['Alice']);
@@ -103,4 +124,9 @@ describe('parseEntriesFromCsv', () => {
     expect(result.entries).toEqual([]);
     expect(result.error).toMatch(/70,000/);
   });
+});
+
+test('formatted imported names round-trip through the participant field', () => {
+  const entries = ['Alice', 'Bob, Jr', 'Dana "D"'];
+  expect(parseEntries(formatEntriesForInput(entries), 'names').entries).toEqual(entries);
 });

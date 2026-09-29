@@ -1,14 +1,18 @@
-const shuffle = (items, random = Math.random) => {
+import { secureRandomIndex } from './secureRandom';
+
+const shuffle = (items, random) => {
   const arr = [...items];
   for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
+    const j = random ? Math.floor(random() * (i + 1)) : secureRandomIndex(i + 1);
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
 };
 
-export function divideIntoTeams(participants = [], teamCount = 2, random = Math.random) {
-  const safeTeamCount = Math.max(1, Math.min(teamCount, participants.length || 1));
+export function divideIntoTeams(participants = [], teamCount = 2, random) {
+  if (!participants.length) return [];
+  const requestedTeams = Number.isFinite(Number(teamCount)) ? Math.floor(Number(teamCount)) : 2;
+  const safeTeamCount = Math.max(1, Math.min(requestedTeams, participants.length));
   const teams = Array.from({ length: safeTeamCount }, (_, index) => ({
     teamName: `Team ${index + 1}`,
     members: [],
@@ -22,7 +26,7 @@ export function divideIntoTeams(participants = [], teamCount = 2, random = Math.
   return teams;
 }
 
-export function assignRoles(participants = [], roleRules = [], options = {}, random = Math.random) {
+export function assignRoles(participants = [], roleRules = [], options = {}, random) {
   const { allowMultipleRoles = false } = options;
   const shuffled = shuffle(participants, random);
   const assignments = [];

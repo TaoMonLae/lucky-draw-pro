@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "roboto",
+        "files": [
+          "src/components/DrawDisplay.css"
+        ],
+        "createdAt": "2026-09-29T16:25:28.221Z",
+        "reason": "Agent: preserve the existing Roboto Mono console labels while changing only the draw number motion; the app already uses Roboto Mono as its configured display font"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "files": [
+          "src/index.css"
+        ],
+        "createdAt": "2026-09-29T17:23:32.874Z",
+        "reason": "Agent: this pre-existing app-wide base font is the configurable Sans Serif theme default in themeConfig.js and is loaded in public/index.html; changing it would alter typography outside the Grand Prize design work."
+      }
+    ]
+  }
+}

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { usePublicSync } from '../hooks/usePublicSync';
 import { getTypographyProps } from '../utils/typography';
 import { themes } from '../utils/themeConfig';
-import { getPaddedDigits } from '../hooks/useDrawEngine';
+import DrawDisplay from './DrawDisplay';
 import { ConfettiParticle } from './ui';
 import LetterGlitch from './LetterGlitch';
 import GrandFinale from './GrandFinale';
@@ -42,27 +42,6 @@ function WaitingStage({ errorMessage, roomId, syncStatus }) {
         {errorMessage && <p role="alert" className="mt-5 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</p>}
         {!roomId && <p className="mt-5 text-xs text-amber-200/70">Same-device links require the host tab to remain open in this browser.</p>}
       </motion.div>
-    </div>
-  );
-}
-
-function AssignmentBoard({ assignmentResult, displayFont, titleFont }) {
-  const groups = assignmentResult.mode === 'team-divider'
-    ? assignmentResult.teams.map((team) => ({ label: team.teamName, members: team.members }))
-    : assignmentResult.assignments.map((assignment) => ({ label: assignment.role, members: assignment.participants }));
-
-  return (
-    <div className="grid max-h-[58vh] grid-cols-1 gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
-      {groups.map((group, index) => (
-        <motion.section key={`${group.label}-${index}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }} className="theme-panel-surface rounded-2xl border border-[var(--panel-border)] p-5 shadow-xl backdrop-blur-md">
-          <ShapedText as="h3" fontFamily={titleFont} className="border-b border-[var(--panel-border)] pb-3 text-xl font-black break-words" style={{ color: 'var(--title-color)' }}>{group.label}</ShapedText>
-          <ul className="mt-3 space-y-2">
-            {group.members.map((member, memberIndex) => (
-              <ShapedText as="li" fontFamily={displayFont} key={`${member}-${memberIndex}`} className="rounded-xl bg-black/10 px-3 py-2 text-lg font-semibold break-words">{member}</ShapedText>
-            ))}
-          </ul>
-        </motion.section>
-      ))}
     </div>
   );
 }
@@ -113,14 +92,11 @@ export default function PublicView({ roomId = '' }) {
     remainingEntriesCount: legacyRemainingEntries.length,
   };
   const assignmentResult = lastAssignmentResult?.mode === operationMode ? lastAssignmentResult : null;
-  const isAssignmentView = assignmentResult?.mode === 'team-divider' || assignmentResult?.mode === 'role-selector';
   const displayValue = operationMode !== 'standard' && !live.drawing && !assignmentResult
     ? 'Ready'
     : live.displayValue || legacyDisplayValue;
-  const displayTypography = getTypographyProps(String(displayValue), displayFont, displayLetterSpacing);
   const isGrandFinaleActive = live.grandFinalePhase !== 'idle';
   const isGrandFinaleReveal = live.grandFinalePhase === 'reveal';
-  const drawComplete = live.prizeCount > 0 && live.completedPrizeCount >= live.prizeCount;
   const progress = live.prizeCount > 0 ? Math.min(100, (live.completedPrizeCount / live.prizeCount) * 100) : 0;
   const showLetterGlitch = theme === 'Event Night' && !backgroundImage;
   const statusClass = syncStatus === 'live' || syncStatus === 'local'
@@ -140,7 +116,7 @@ export default function PublicView({ roomId = '' }) {
       {showLetterGlitch && (
         <div className="pointer-events-none fixed inset-0 z-0">
           <LetterGlitch glitchColors={LETTER_GLITCH_COLORS} glitchSpeed={70} centerVignette outerVignette={false} smooth />
-          <div className="absolute inset-0 bg-black/65" />
+          <div className="absolute inset-0 bg-black/85" />
         </div>
       )}
       {!showLetterGlitch && !backgroundImage && <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_15%,rgba(255,255,255,0.13),transparent_35%),radial-gradient(circle_at_20%_85%,rgba(6,182,212,0.12),transparent_40%)]" />}
@@ -154,6 +130,8 @@ export default function PublicView({ roomId = '' }) {
             displayFont={displayFont}
             logo={logo}
             backgroundImage={backgroundImage}
+            activeIndex={live.celebrationIndex ?? 0}
+            playing={live.celebrationPlaying ?? true}
           />
         )}
       </AnimatePresence>
@@ -182,45 +160,17 @@ export default function PublicView({ roomId = '' }) {
           <section className="theme-panel-surface relative flex min-h-[58vh] flex-col justify-center overflow-hidden rounded-[2rem] border border-[var(--panel-border)] p-5 shadow-2xl backdrop-blur-xl sm:p-8 lg:min-h-0">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(255,255,255,0.1),transparent_48%)]" />
             <div className="relative z-10">
-              {isAssignmentView && !live.drawing ? (
-                <AssignmentBoard assignmentResult={assignmentResult} displayFont={displayFont} titleFont={titleFont} />
-              ) : (
-                <div className="flex flex-col items-center text-center">
-                  <AnimatePresence mode="wait">
-                    <motion.div key={`${live.drawing}-${isGrandFinaleReveal}-${drawComplete}`} initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} className={`mb-5 rounded-full border px-5 py-2 text-xs font-black uppercase tracking-[0.22em] sm:text-sm ${isGrandFinaleActive ? 'border-yellow-300/70 bg-yellow-300 text-slate-950 shadow-[0_0_30px_rgba(250,204,21,.45)]' : 'border-[var(--panel-border)] bg-black/15'}`}>
-                      {isGrandFinaleReveal ? 'Grand prize winner' : live.drawing ? `Now drawing · ${live.currentPrize}` : drawComplete ? 'Draw complete' : latestGroup ? `${latestGroup.prize} winner` : 'Ready for the draw'}
-                    </motion.div>
-                  </AnimatePresence>
-
-                  <motion.div
-                    animate={isGrandFinaleReveal
-                      ? { scale: [1, 1.045, 1], boxShadow: ['0 0 25px rgba(250,204,21,.35)', '0 0 95px rgba(250,204,21,.9)', '0 0 40px rgba(250,204,21,.5)'] }
-                      : live.drawing ? { scale: [1, 1.012, 1], boxShadow: ['0 0 16px rgba(255,255,255,.12)', '0 0 44px rgba(255,255,255,.28)', '0 0 16px rgba(255,255,255,.12)'] } : {}}
-                    transition={{ duration: isGrandFinaleReveal ? 1.2 : 1.7, repeat: live.drawing ? Infinity : 0 }}
-                    className="relative flex min-h-44 w-full max-w-4xl items-center justify-center overflow-hidden rounded-[1.75rem] border-4 bg-[var(--display-bg)] px-5 py-8 shadow-inner sm:min-h-64"
-                    style={{ borderColor: isGrandFinaleActive ? '#fde047' : 'var(--display-border)' }}
-                  >
-                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_20%,rgba(255,255,255,.08)_48%,transparent_72%)]" />
-                    {operationMode === 'standard' && drawMode === 'numbers' ? (
-                      <div lang={displayTypography.lang} className="relative flex max-w-full items-center justify-center font-black" style={{ ...displayTypography.style, color: 'var(--display-text)', fontSize: `clamp(3rem, ${Math.min(displayFontSize, 150)}px, ${Math.max(8, 70 / Math.max(maxDigits, 1))}vw)`, lineHeight: displayLineHeight, textShadow: `0 0 28px ${currentTheme['--display-shadow']}`, fontVariantNumeric: 'tabular-nums lining-nums' }}>
-                        {getPaddedDigits(displayValue, maxDigits).map((digit, index) => (
-                          <span key={index} className="inline-block w-[1ch] text-center"><AnimatePresence mode="popLayout"><motion.span key={`${digit}-${index}`} initial={{ opacity: 0.45, y: -35, filter: 'blur(4px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} exit={{ opacity: 0.25, y: 35, filter: 'blur(4px)' }} transition={{ duration: 0.2 }}>{digit}</motion.span></AnimatePresence></span>
-                        ))}
-                      </div>
-                    ) : (
-                      <AnimatePresence mode="wait">
-                        <motion.div key={displayValue} initial={{ opacity: 0, scale: 0.92, y: -24 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 24 }} className="relative max-w-full break-words px-3 text-center font-black" lang={displayTypography.lang} style={{ ...displayTypography.style, color: 'var(--display-text)', fontSize: `clamp(2.2rem, ${Math.min(displayFontSize, 120)}px, 9vw)`, lineHeight: displayLineHeight, textShadow: `0 0 28px ${currentTheme['--display-shadow']}` }}>{displayValue}</motion.div>
-                      </AnimatePresence>
-                    )}
-                  </motion.div>
-
-                  <div className="mt-6 grid w-full max-w-3xl grid-cols-3 gap-2 text-left sm:gap-4">
-                    <div className="rounded-xl border border-[var(--panel-border)] bg-black/10 p-3 sm:p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] sm:text-xs">{!live.drawing && latestGroup && !live.showConfetti && !drawComplete ? 'Next prize' : 'Prize'}</p><p className="mt-1 truncate text-sm font-black sm:text-lg">{live.currentPrize || latestGroup?.prize || 'Waiting'}</p></div>
-                    <div className="rounded-xl border border-[var(--panel-border)] bg-black/10 p-3 sm:p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] sm:text-xs">Progress</p><p className="mt-1 text-sm font-black tabular-nums sm:text-lg">{live.completedPrizeCount} / {live.prizeCount || '—'}</p></div>
-                    <div className="rounded-xl border border-[var(--panel-border)] bg-black/10 p-3 sm:p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] sm:text-xs">Eligible</p><p className="mt-1 text-sm font-black tabular-nums sm:text-lg">{Number.isFinite(live.remainingEntriesCount) ? live.remainingEntriesCount : '—'}</p></div>
-                  </div>
-                </div>
-              )}
+              <DrawDisplay value={displayValue} drawing={live.drawing} charging={Boolean(live.charging)} chargeProgress={live.chargeProgress || 0} mode={operationMode}
+                drawMode={drawMode} maxDigits={maxDigits} lockedDigits={live.lockedDigits || ''} result={assignmentResult}
+                revealed={operationMode === 'standard' && Boolean(latestGroup)}
+                finale={operationMode === 'standard' && isGrandFinaleActive}
+                context={operationMode === 'standard' ? live.drawing ? live.currentPrize : latestGroup?.prize || '' : ''}
+                fontFamily={displayFont} fontSize={Math.min(displayFontSize, 150)}
+                lineHeight={displayLineHeight} letterSpacing={displayLetterSpacing} minHeight={240} />
+              <div className="mt-5 flex flex-wrap justify-between gap-3 text-sm text-[var(--text-muted)]">
+                <span>{operationMode === 'standard' ? 'Prizes awarded: ' + live.completedPrizeCount + ' / ' + live.prizeCount : operationMode === 'team-divider' ? 'Team assignment' : 'Role assignment'}</span>
+                <span>{Number.isFinite(live.remainingEntriesCount) ? live.remainingEntriesCount : 0} eligible participants</span>
+              </div>
             </div>
           </section>
 
