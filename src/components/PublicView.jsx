@@ -12,6 +12,8 @@ import WinnerCarousel from './WinnerCarousel';
 const SYNC_LABELS = {
   connecting: 'Connecting',
   live: 'Live',
+  drawing: 'Drawing',
+  offline: 'Host offline',
   local: 'Same-device live',
   unconfigured: 'Sync unavailable',
   error: 'Connection lost',
@@ -35,7 +37,7 @@ function WaitingStage({ errorMessage, roomId, syncStatus }) {
         <h1 className="mt-4 text-3xl font-black sm:text-5xl">Waiting for the draw</h1>
         <p className="mt-4 text-base text-slate-300">This screen will update automatically when the host starts.</p>
         <div className="mt-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-semibold">
-          <span className={`h-2 w-2 rounded-full ${syncStatus === 'error' || syncStatus === 'closed' || syncStatus === 'unconfigured' ? 'bg-red-400' : 'bg-amber-300'}`} />
+          <span className={`h-2 w-2 rounded-full ${['error', 'closed', 'unconfigured', 'offline'].includes(syncStatus) ? 'bg-red-400' : 'bg-amber-300'}`} />
           {SYNC_LABELS[syncStatus]}
         </div>
         {roomId && <p className="mt-3 font-mono text-xs text-slate-500">Room {roomId.slice(0, 8)}</p>}
@@ -101,7 +103,7 @@ export default function PublicView({ roomId = '' }) {
   const showLetterGlitch = theme === 'Event Night' && !backgroundImage;
   const statusClass = syncStatus === 'live' || syncStatus === 'local'
     ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30'
-    : syncStatus === 'error' || syncStatus === 'closed' || syncStatus === 'unconfigured'
+    : syncStatus === 'error' || syncStatus === 'closed' || syncStatus === 'unconfigured' || syncStatus === 'offline'
       ? 'bg-red-500/15 text-red-200 border-red-400/30'
       : 'bg-amber-500/15 text-amber-100 border-amber-400/30';
   const mainStyle = {

@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "test:integration": "node test/integration.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.144.0"
+  }
+}

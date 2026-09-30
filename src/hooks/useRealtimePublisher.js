@@ -1,79 +1,119 @@
 import { useEffect, useRef, useState } from 'react';
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+import { isRoomServiceConfigured, roomSocketUrl } from '../lib/roomApi';
 import { toPublicDrawState } from '../utils/realtimeRoom';
 
-const INITIAL_STATUS = isSupabaseConfigured ? 'idle' : 'unconfigured';
-
-export function useRealtimePublisher({ roomId, writeKey, appState, enabled = true }) {
-  const [status, setStatus] = useState(INITIAL_STATUS);
+export function useRealtimePublisher({ roomId, writeKey, appState, enabled = true, onDraw }) {
+  const [status, setStatus] = useState(isRoomServiceConfigured ? 'idle' : 'unconfigured');
   const [errorMessage, setErrorMessage] = useState('');
-  const readyRoomRef = useRef('');
-  const lastPublishedRef = useRef('');
-  const publishQueueRef = useRef(Promise.resolve());
+  const [listenerStatus, setListenerStatus] = useState('idle');
+  const socketRef = useRef(null);
+  const onDrawRef = useRef(onDraw);
+  const stateRef = useRef(appState);
+  const revisionRef = useRef(0);
+  const sentRef = useRef('');
+  const inFlightRef = useRef('');
+  const queuedRef = useRef(false);
+  const authorizedRef = useRef(false);
+  const publishRef = useRef(() => {});
+  onDrawRef.current = onDraw;
+  stateRef.current = appState;
+
+  publishRef.current = () => {
+    const socket = socketRef.current;
+    if (!authorizedRef.current || socket?.readyState !== WebSocket.OPEN || queuedRef.current) return;
+    let snapshot;
+    try { snapshot = toPublicDrawState(stateRef.current); }
+    catch (error) { setStatus('error'); setErrorMessage(error.message); return; }
+    const comparable = JSON.stringify({ ...snapshot, updatedAt: '' });
+    if (comparable === sentRef.current) { setStatus('live'); return; }
+    queuedRef.current = true;
+    inFlightRef.current = comparable;
+    setStatus('syncing');
+    socket.send(JSON.stringify({ type: 'publish', baseRevision: revisionRef.current, snapshot }));
+  };
+
+  useEffect(() => { publishRef.current(); }, [appState]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setStatus('unconfigured');
-      return undefined;
-    }
+    if (!isRoomServiceConfigured) { setStatus('unconfigured'); return undefined; }
     if (!enabled || !roomId || !writeKey) {
-      setStatus('idle');
-      setErrorMessage('');
-      readyRoomRef.current = '';
-      lastPublishedRef.current = '';
+      setStatus('idle'); setListenerStatus('idle'); setErrorMessage('');
       return undefined;
     }
-
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      publishQueueRef.current = publishQueueRef.current
-        .catch(() => undefined)
-        .then(async () => {
-          if (cancelled) return;
-          try {
-            setStatus(readyRoomRef.current === roomId ? 'syncing' : 'connecting');
-            setErrorMessage('');
-
-            if (readyRoomRef.current !== roomId) {
-              const { error: roomError } = await supabase.rpc('create_draw_room', {
-                p_room_id: roomId,
-                p_write_key: writeKey,
-              });
-              if (roomError) throw roomError;
-              readyRoomRef.current = roomId;
-            }
-
-            const publicState = toPublicDrawState(appState);
-            const serializedState = JSON.stringify(publicState);
-            if (serializedState === lastPublishedRef.current) {
-              if (!cancelled) setStatus('live');
-              return;
-            }
-
-            const { error: publishError } = await supabase.rpc('publish_draw_state', {
-              p_room_id: roomId,
-              p_write_key: writeKey,
-              p_state: publicState,
-            });
-            if (publishError) throw publishError;
-
-            lastPublishedRef.current = serializedState;
-            if (!cancelled) setStatus('live');
-          } catch (error) {
-            if (!cancelled) {
-              console.error('Failed to publish live draw state', error);
-              setStatus('error');
-              setErrorMessage(error.message || 'Could not publish live draw state.');
-            }
+    let stopped = false;
+    let socket;
+    let reconnectTimer;
+    let heartbeatTimer;
+    let attempt = 0;
+    sentRef.current = '';
+    const connect = () => {
+      if (stopped) return;
+      setStatus('connecting'); setListenerStatus('connecting');
+      socket = new WebSocket(roomSocketUrl(roomId));
+      socketRef.current = socket;
+      authorizedRef.current = false;
+      queuedRef.current = false;
+      socket.onopen = () => socket.send(JSON.stringify({ type: 'auth', key: writeKey }));
+      socket.onmessage = (event) => {
+        let message;
+        try { message = JSON.parse(event.data); } catch { return; }
+        if (message.type === 'authorized') {
+          revisionRef.current = message.revision;
+          authorizedRef.current = true;
+          attempt = 0;
+          setListenerStatus('listening'); setErrorMessage('');
+          publishRef.current();
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'heartbeat' }));
+          }, 5000);
+        } else if (message.type === 'published') {
+          revisionRef.current = message.revision;
+          queuedRef.current = false;
+          sentRef.current = inFlightRef.current;
+          setStatus('live');
+          publishRef.current();
+        } else if (message.type === 'stale') {
+          revisionRef.current = message.revision;
+          queuedRef.current = false;
+          sentRef.current = '';
+          publishRef.current();
+        } else if (message.type === 'draw-request') {
+          Promise.resolve(onDrawRef.current?.()).catch(() => {
+            setListenerStatus('error'); setErrorMessage('The requested draw could not start.');
+          });
+        } else if (message.type === 'error') {
+          queuedRef.current = false;
+          setStatus('error'); setErrorMessage(message.message || 'The room rejected an update.');
+          if (message.message === 'Unauthorized.') {
+            stopped = true;
+            setListenerStatus('error');
+            socket.close();
           }
-        });
-    }, 180);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
+        } else if (message.type === 'closed') {
+          stopped = true;
+          setStatus('error'); setListenerStatus('error'); setErrorMessage('This room has closed. Start a new room.');
+          socket.close();
+        }
+      };
+      socket.onerror = () => { setStatus('error'); setErrorMessage('Connection to the room service was interrupted.'); };
+      socket.onclose = () => {
+        clearInterval(heartbeatTimer);
+        authorizedRef.current = false;
+        queuedRef.current = false;
+        if (stopped) return;
+        setStatus('connecting'); setListenerStatus('connecting');
+        reconnectTimer = setTimeout(connect, Math.min(1000 * (2 ** attempt++), 10000));
+      };
     };
-  }, [appState, enabled, roomId, writeKey]);
+    connect();
+    return () => {
+      stopped = true;
+      clearTimeout(reconnectTimer); clearInterval(heartbeatTimer);
+      socket?.close();
+      if (socketRef.current === socket) socketRef.current = null;
+    };
+  }, [enabled, roomId, writeKey]);
 
-  return { status, errorMessage };
+  return { status, errorMessage, listenerStatus };
 }

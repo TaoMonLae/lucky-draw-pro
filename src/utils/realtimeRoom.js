@@ -81,9 +81,22 @@ export function toPublicDrawState(appState) {
     drawMode: appState.drawMode === 'names' ? 'names' : 'numbers',
     maxDigits: Math.max(1, Math.min(10, Math.round(safeNumber(appState.maxDigits, 2)))),
     logo: typeof appState.logo === 'string' && appState.logo.length <= 250_000 ? appState.logo : null,
-    winnersHistory: Array.isArray(appState.winnersHistory) ? appState.winnersHistory : [],
+    winnersHistory: Array.isArray(appState.winnersHistory) ? appState.winnersHistory.map((group) => ({
+      prize: String(group?.prize || '').slice(0, 200),
+      tickets: Array.isArray(group?.tickets) ? group.tickets.map((ticket) => String(ticket).slice(0, 500)) : [],
+    })) : [],
     operationMode: appState.operationMode || 'standard',
-    lastAssignmentResult: appState.lastAssignmentResult || null,
+    lastAssignmentResult: appState.lastAssignmentResult?.mode === 'team-divider'
+      ? { mode: 'team-divider', teams: (appState.lastAssignmentResult.teams || []).map((team) => ({
+        teamName: String(team.teamName || '').slice(0, 200),
+        members: (team.members || []).map((member) => String(member).slice(0, 500)),
+      })) }
+      : appState.lastAssignmentResult?.mode === 'role-selector'
+        ? { mode: 'role-selector', assignments: (appState.lastAssignmentResult.assignments || []).map((assignment) => ({
+          role: String(assignment.role || '').slice(0, 200),
+          participants: (assignment.participants || []).map((participant) => String(participant).slice(0, 500)),
+        })) }
+        : null,
     live: {
       drawing: Boolean(appState.drawing),
       charging: Boolean(appState.isCharging),
@@ -118,6 +131,23 @@ export function toPublicDrawState(appState) {
 
 export function isValidPublicDrawState(value) {
   if (!value || typeof value !== 'object' || ![1, 2].includes(value.version)) return false;
+  if (value.version === 2) {
+    const allowed = new Set(['version', 'title', 'subtitle', 'theme', 'backgroundImage', 'titleFont', 'subtitleFont', 'displayFont', 'titleColor', 'subtitleColor', 'titleFontSize', 'subtitleFontSize', 'displayFontSize', 'displayLineHeight', 'displayLetterSpacing', 'drawMode', 'maxDigits', 'logo', 'winnersHistory', 'operationMode', 'lastAssignmentResult', 'live', 'updatedAt']);
+    if (Object.keys(value).some((key) => !allowed.has(key))) return false;
+    if (!Array.isArray(value.winnersHistory)) return false;
+    if (value.winnersHistory.some((group) => !group || typeof group !== 'object' || Object.keys(group).some((key) => !['prize', 'tickets'].includes(key)))) return false;
+    if (value.lastAssignmentResult) {
+      const result = value.lastAssignmentResult;
+      const allowedResult = result.mode === 'team-divider' ? ['mode', 'teams'] : ['mode', 'assignments'];
+      if (Object.keys(result).some((key) => !allowedResult.includes(key))) return false;
+      const entries = result.mode === 'team-divider' ? result.teams : result.assignments;
+      const keys = result.mode === 'team-divider' ? ['teamName', 'members'] : ['role', 'participants'];
+      if (!Array.isArray(entries) || entries.some((entry) => !entry || Object.keys(entry).some((key) => !keys.includes(key)))) return false;
+    }
+    if (!value.live || typeof value.live !== 'object') return false;
+    const allowedLive = new Set(['drawing', 'charging', 'chargeProgress', 'currentPrize', 'displayValue', 'lockedDigitCount', 'lockedDigits', 'grandFinalePhase', 'celebrationIndex', 'celebrationPlaying', 'showConfetti', 'remoteControlReady', 'completedPrizeCount', 'prizeCount', 'totalEntries', 'remainingEntriesCount']);
+    if (Object.keys(value.live).some((key) => !allowedLive.has(key))) return false;
+  }
   if (typeof value.title !== 'string' || typeof value.subtitle !== 'string') return false;
   if (value.logo !== null && value.logo !== undefined && typeof value.logo !== 'string') return false;
   if (typeof value.updatedAt !== 'string' || Number.isNaN(Date.parse(value.updatedAt))) return false;

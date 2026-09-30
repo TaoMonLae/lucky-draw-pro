@@ -1,107 +1,62 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { usePublicSync } from './usePublicSync';
 import { toPublicDrawState } from '../utils/realtimeRoom';
 
-const mockFrom = jest.fn();
-const mockRemoveChannel = jest.fn();
-const mockChannelFactory = jest.fn();
-
-jest.mock('../lib/supabaseClient', () => ({
-  isSupabaseConfigured: true,
-  supabase: {
-    from: (...args) => mockFrom(...args),
-    channel: (...args) => mockChannelFactory(...args),
-    removeChannel: (...args) => mockRemoveChannel(...args),
-  },
+jest.mock('../lib/roomApi', () => ({
+  isRoomServiceConfigured: true,
+  roomSocketUrl: (id) => `wss://rooms.test/rooms/${id}/socket`,
+  roomRequest: () => Promise.resolve({}),
 }));
 
-test('fetches the latest room state once after realtime subscribes', async () => {
-  const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
-  const eq = jest.fn(() => ({ maybeSingle }));
-  const select = jest.fn(() => ({ eq }));
-  mockFrom.mockReturnValue({ select });
+const roomId = '123e4567-e89b-42d3-a456-426614174000';
+let sockets;
+class FakeSocket {
+  static OPEN = 1;
+  constructor() { this.readyState = 0; sockets.push(this); }
+  open() { this.readyState = 1; this.onopen?.(); }
+  send() {}
+  message(value) { this.onmessage?.({ data: JSON.stringify(value) }); }
+  close() { this.readyState = 3; this.onclose?.(); }
+}
 
-  let subscriptionCallback;
-  const channel = {
-    on: jest.fn(() => channel),
-    subscribe: jest.fn((callback) => {
-      subscriptionCallback = callback;
-      return channel;
-    }),
-  };
-  mockChannelFactory.mockReturnValue(channel);
+beforeEach(() => { sockets = []; global.WebSocket = FakeSocket; });
 
-  const { unmount } = renderHook(() => usePublicSync({
-    roomId: '123e4567-e89b-42d3-a456-426614174000',
-  }));
-
-  expect(mockFrom).not.toHaveBeenCalled();
-  act(() => subscriptionCallback('SUBSCRIBED'));
-  await waitFor(() => expect(mockFrom).toHaveBeenCalledTimes(1));
-  expect(maybeSingle).toHaveBeenCalledTimes(1);
-
+test('loads the current public snapshot and shows host presence', () => {
+  const { result, unmount } = renderHook(() => usePublicSync({ roomId }));
+  const snapshot = toPublicDrawState({ title: 'Live room' });
+  act(() => { sockets[0].open(); sockets[0].message({ type: 'state', status: 'open', revision: 1, snapshot, hostOnline: true, hostSeen: Date.now() }); });
+  expect(result.current.drawState?.title).toBe('Live room');
+  expect(result.current.revision).toBe(1);
+  expect(result.current.syncStatus).toBe('live');
   unmount();
-  expect(mockRemoveChannel).toHaveBeenCalledWith(channel);
 });
 
-test('keeps newer realtime data when an older initial fetch finishes later', async () => {
-  let finishFetch;
-  const maybeSingle = jest.fn(() => new Promise((resolve) => { finishFetch = resolve; }));
-  mockFrom.mockReturnValue({ select: () => ({ eq: () => ({ maybeSingle }) }) });
-
-  let subscriptionCallback;
-  let updateCallback;
-  const channel = {
-    on: jest.fn((_, filter, callback) => {
-      if (filter.event === '*') updateCallback = callback;
-      return channel;
-    }),
-    subscribe: jest.fn((callback) => {
-      subscriptionCallback = callback;
-      return channel;
-    }),
-  };
-  mockChannelFactory.mockReturnValue(channel);
-
-  const { result } = renderHook(() => usePublicSync({ roomId: '123e4567-e89b-42d3-a456-426614174000' }));
-  const older = { ...toPublicDrawState({}), updatedAt: '2026-09-28T10:00:00.000Z' };
-  const newer = { ...toPublicDrawState({}), title: 'Latest result', updatedAt: '2026-09-28T10:00:01.000Z' };
-
-  act(() => subscriptionCallback('SUBSCRIBED'));
-  await waitFor(() => expect(maybeSingle).toHaveBeenCalledTimes(1));
-  act(() => updateCallback({ new: { state: newer } }));
-  await waitFor(() => expect(result.current.drawState?.title).toBe('Latest result'));
-  await act(async () => finishFetch({ data: { state: older }, error: null }));
-
-  expect(result.current.drawState).toEqual(newer);
-});
-
-test('does not revive a closed room from an in-flight fetch', async () => {
-  let finishFetch;
-  const maybeSingle = jest.fn(() => new Promise((resolve) => { finishFetch = resolve; }));
-  mockFrom.mockReturnValue({ select: () => ({ eq: () => ({ maybeSingle }) }) });
-
-  let subscriptionCallback;
-  let deleteCallback;
-  const channel = {
-    on: jest.fn((_, filter, callback) => {
-      if (filter.event === 'DELETE') deleteCallback = callback;
-      return channel;
-    }),
-    subscribe: jest.fn((callback) => {
-      subscriptionCallback = callback;
-      return channel;
-    }),
-  };
-  mockChannelFactory.mockReturnValue(channel);
-
-  const roomId = '123e4567-e89b-42d3-a456-426614174000';
-  const { result } = renderHook(() => usePublicSync({ roomId }));
-  act(() => subscriptionCallback('SUBSCRIBED'));
-  await waitFor(() => expect(maybeSingle).toHaveBeenCalledTimes(1));
-  act(() => deleteCallback({ old: { room_id: roomId } }));
-  await act(async () => finishFetch({ data: { state: toPublicDrawState({}) }, error: null }));
-
-  expect(result.current.syncStatus).toBe('closed');
+test('ignores stale snapshots and reports drawing, offline and closed', () => {
+  const { result, unmount } = renderHook(() => usePublicSync({ roomId }));
+  const newer = toPublicDrawState({ title: 'Newest', drawing: true });
+  const older = toPublicDrawState({ title: 'Older' });
+  act(() => {
+    sockets[0].open();
+    sockets[0].message({ type: 'state', status: 'open', revision: 2, snapshot: newer, hostOnline: true, hostSeen: Date.now() });
+    sockets[0].message({ type: 'state', status: 'open', revision: 1, snapshot: older, hostOnline: true, hostSeen: Date.now() });
+  });
+  expect(result.current.drawState?.title).toBe('Newest');
+  expect(result.current.syncStatus).toBe('drawing');
+  act(() => sockets[0].message({ type: 'presence', hostOnline: false, hostSeen: Date.now() }));
+  expect(result.current.syncStatus).toBe('offline');
+  act(() => sockets[0].message({ type: 'closed' }));
   expect(result.current.drawState).toBeNull();
+  expect(result.current.syncStatus).toBe('closed');
+  unmount();
+});
+
+test('reconnects after an interrupted socket', async () => {
+  jest.useFakeTimers();
+  const { result, unmount } = renderHook(() => usePublicSync({ roomId }));
+  await act(async () => { sockets[0].open(); sockets[0].close(); });
+  expect(result.current.syncStatus).toBe('connecting');
+  act(() => jest.advanceTimersByTime(1000));
+  expect(sockets).toHaveLength(2);
+  unmount();
+  jest.useRealTimers();
 });

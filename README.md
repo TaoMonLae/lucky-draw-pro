@@ -12,7 +12,7 @@ Lucky Draw Pro is a customizable React application for running live raffles, pri
 - Text and CSV participant import with duplicate cleanup
 - JSON session save/load and automatic browser-session restoration
 - Winners, assignments, and audit-log exports in CSV, JSON, and PNG formats
-- Cross-device live audience view using Supabase Realtime, with a same-browser fallback
+- Cross-device live audience view using Cloudflare Durable Objects, with a same-browser fallback
 - Tiered regular-prize fanfares and an expanded grand-prize finale with bundled Magnific effects
 - Event themes, typography controls, logos, and custom background images
 - Private Burmese display-font support with Unicode-safe Mon fallback and OpenType shaping
@@ -24,7 +24,7 @@ Lucky Draw Pro is a customizable React application for running live raffles, pri
 - Node.js 18 or newer
 - npm
 - A modern browser with Canvas and local-storage support
-- A Supabase project for optional cross-device synchronization
+- A Cloudflare account for optional cross-device synchronization
 
 ## Getting Started
 
@@ -71,7 +71,7 @@ For another tab in the same browser profile, open **Settings → Public View** a
 ?view=public
 ```
 
-For phones, tablets, projectors, and other computers, configure Supabase and select **Start Cross-Device Room**. Share the generated room link; the current draw animation, prize name, event styling, progress, winner history, grand-prize finale, and team or role results will update live. **Stop Sharing** closes the room and removes its public state.
+For phones, tablets, projectors, and other computers, deploy the room Worker and select **Start Cross-Device Room**. Share the generated room link; the current draw animation, prize name, event styling, progress, winner history, grand-prize finale, and team or role results will update live. **Stop Sharing** closes the room and removes its public state.
 
 After the final grand-prize reveal, the host and public display automatically transition into an **All Winners** carousel. Every winning entry is presented with its prize in draw order. The host can select **Finish Celebration** or press `Escape` to return to the main draw screen.
 
@@ -81,22 +81,21 @@ After starting a cross-device room, open **Settings → Audience → MC Remote C
 
 The remote link contains a bearer credential in its URL fragment. Do not share it with the audience. Use **Rotate Link** immediately if it is exposed; the previous link will stop working. **Disable** revokes remote access without closing the audience display.
 
-## Supabase Cross-Device Setup
+## Cloudflare Cross-Device Setup
 
-1. Create a Supabase project.
-2. Open the project’s SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql). Rerun the complete file after app upgrades so the latest remote-control functions are installed.
-3. Copy `.env.example` to `.env.local` and fill in the project URL and publishable key:
+1. In `worker/`, run `npm ci` and `npx wrangler deploy`. The Worker uses one SQLite-backed Durable Object per random room ID.
+2. Add your Vercel production origin to `worker/wrangler.jsonc` under `ALLOWED_ORIGINS` and deploy the Worker again if it differs from `https://lucky-draw-pro.vercel.app`.
+3. Copy `.env.example` to `.env.local` and enter the deployed Worker URL:
 
 ```bash
-REACT_APP_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-REACT_APP_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
+REACT_APP_ROOM_WORKER_URL=https://YOUR_WORKER.YOUR_SUBDOMAIN.workers.dev
 ```
 
 4. Restart `npm start` after changing local environment variables.
-5. For Vercel, add both variables in **Project Settings → Environment Variables**, then redeploy the app.
+5. For Vercel, add `REACT_APP_ROOM_WORKER_URL` in **Project Settings → Environment Variables**, then redeploy the app.
 6. Open **Settings → Public View**, start a room, and share its generated link.
 
-Use a Supabase publishable key in the browser. Never put a secret key or `service_role` key in a `REACT_APP_*` variable.
+The Worker URL is public configuration. Host and MC credentials are generated separately in the host browser. Only the MC link's fragment contains the MC credential; the audience link contains only the room ID. The Worker stores credential hashes and never sends either credential in a public snapshot.
 
 ## Private Burmese Fonts
 
@@ -132,17 +131,18 @@ Creates an optimized production build in the `build/` directory.
 src/
 ├── components/    Host, public display, shared UI, and visual effects
 ├── hooks/         Audio, persistence, shortcuts, and realtime synchronization
-├── lib/           Supabase client configuration
+├── lib/           Room service client
 ├── utils/         Parsing, validation, draw modes, templates, and exports
 ├── App.js         Host/public view routing
 └── index.js       React entry point
-supabase/
-└── schema.sql     Room tables, security policies, RPCs, and Realtime publication
+worker/
+├── src/           Durable Object room service
+└── wrangler.jsonc Cloudflare deployment configuration
 ```
 
 ## Data and Privacy
 
-Session autosaves, full participant lists, audit logs, and exports stay in the host browser. When cross-device sharing is enabled, Supabase receives only public event styling, a size-limited logo and background, transient draw-display values and progress counts, public winner history, public team/role results, and short-lived remote draw requests. Participant lists and audit logs are never published. Room write credentials remain in the host browser; MC remote credentials are stored only as hashes in Supabase, requests are rate-limited, and rooms expire automatically after seven days.
+Session autosaves, full participant lists, audit logs, and exports stay in the host browser. When cross-device sharing is enabled, Cloudflare receives only public event styling, a size-limited logo and background, transient draw-display values and progress counts, public winner history, public team/role results, and short-lived remote draw requests. Participant lists and audit logs are never published. Credentials remain in the host browser or private MC link; the Worker stores only hashes. Rooms expire automatically after seven days.
 
 ## Audio Sources
 

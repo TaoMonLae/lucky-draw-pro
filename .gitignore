@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.wrangler/
 
 # Production build artifacts (optional — remove if you want to commit build/)
 # build/

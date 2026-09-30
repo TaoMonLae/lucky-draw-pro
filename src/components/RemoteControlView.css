@@ -1,0 +1,210 @@
+.mc-remote {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 40px);
+  color: #f8f5eb;
+  background: #090a0a;
+}
+
+.mc-remote__console {
+  width: min(100%, 480px);
+  border: 1px solid #3d403c;
+  background: #151716;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .38);
+}
+
+.mc-remote__header {
+  padding: clamp(24px, 6vw, 34px);
+  border-bottom: 1px solid #343733;
+}
+
+.mc-remote__header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  color: #d8d6c9;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mc-remote__role {
+  padding: 5px 9px;
+  border: 1px solid #676046;
+  color: #ead28b;
+  font-size: 10px;
+}
+
+.mc-remote__header h1 {
+  margin: 22px 0 18px;
+  font-size: clamp(28px, 7vw, 38px);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -.03em;
+  overflow-wrap: anywhere;
+}
+
+.mc-remote__connection {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: #deddd3;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.mc-remote__signal {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.mc-remote__stage {
+  padding: 0 clamp(24px, 6vw, 34px) clamp(24px, 6vw, 34px);
+}
+
+.mc-remote__prize {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 27px 0 28px;
+  border-bottom: 1px solid #343733;
+}
+
+.mc-remote__label {
+  display: block;
+  color: #b3b4aa;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mc-remote__prize h2 {
+  margin: 8px 0 0;
+  font-size: clamp(22px, 6vw, 29px);
+  font-weight: 750;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+
+.mc-remote__progress {
+  flex: none;
+  text-align: right;
+}
+
+.mc-remote__progress strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mc-remote__action-area { padding-top: 27px; }
+
+.mc-remote__instruction {
+  min-height: 39px;
+  margin: 0 0 16px;
+  color: #d0d0c5;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.mc-remote__action {
+  display: flex;
+  width: 100%;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border: 1px solid #f5d779;
+  border-radius: 10px;
+  color: #181712;
+  background: #f5d779;
+  cursor: pointer;
+  font-size: clamp(20px, 5vw, 25px);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  text-align: left;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.mc-remote__action:hover:not(:disabled) { background: #ffe69b; }
+.mc-remote__action:active:not(:disabled) { transform: scale(.985); }
+.mc-remote__action--armed { background: #fff0c3; }
+.mc-remote__action:disabled {
+  border-color: #53564f;
+  color: #b5b7ac;
+  background: #383b36;
+  cursor: not-allowed;
+}
+
+.mc-remote__action-marker {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.mc-remote__action--armed .mc-remote__action-marker { background: currentColor; }
+.mc-remote__action-arrow { margin-left: auto; font-size: 28px; font-weight: 400; }
+
+.mc-remote__cancel {
+  display: block;
+  min-height: 44px;
+  margin: 11px auto 0;
+  padding: 8px 22px;
+  border: 0;
+  color: #e2d8b9;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.mc-remote__action:focus-visible,
+.mc-remote__cancel:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.mc-remote__feedback {
+  min-height: 52px;
+  margin: 23px 0 0;
+  padding-top: 17px;
+  border-top: 1px solid #343733;
+  color: #d8d9cd;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mc-remote__feedback--error { color: #ffb0a6; }
+
+.mc-remote__footer {
+  margin: 0;
+  padding: 16px clamp(24px, 6vw, 34px) 20px;
+  border-top: 1px solid #343733;
+  color: #b5b7ac;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 380px) {
+  .mc-remote__prize { gap: 12px; }
+  .mc-remote__progress strong { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mc-remote__action { transition: none; }
+  .mc-remote__action:active:not(:disabled) { transform: none; }
+}

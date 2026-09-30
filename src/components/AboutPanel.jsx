@@ -9,7 +9,7 @@ const ABOUT_FEATURES = [
   {
     icon: '↗',
     title: 'Live audience view',
-    description: 'Mirror the show to a projector, another browser, or remote devices with Supabase.',
+    description: 'Mirror the show to a projector, another browser, or remote devices with Cloudflare rooms.',
   },
   {
     icon: '⌁',

@@ -24,9 +24,8 @@ import { assignRoles, createAuditEntry, divideIntoTeams, getNoRepeatSet, parseRo
 import { buildPublicViewUrl } from '../utils/publicViewUrl';
 import { useRealtimePublisher } from '../hooks/useRealtimePublisher';
 import { usePublicBroadcast } from '../hooks/usePublicBroadcast';
-import { useRemoteDrawController } from '../hooks/useRemoteDrawController';
 import { useFinaleModeReset } from '../hooks/useFinaleModeReset';
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+import { isRoomServiceConfigured, roomRequest } from '../lib/roomApi';
 import { clearRoomCredentials, createRoomCredentials, loadRoomCredentials, saveRoomCredentials } from '../utils/realtimeRoom';
 import { buildRemoteControlUrl, clearRemoteControlCredentials, createRemoteControlCredentials, isHostReadyForRemoteDraw, loadRemoteControlCredentials, saveRemoteControlCredentials } from '../utils/remoteControl';
 import { getTypographyProps } from '../utils/typography';
@@ -70,6 +69,7 @@ const LIVE_SYNC_LABELS = {
   syncing: 'Updating…',
   live: 'Live',
   error: 'Sync error',
+  closed: 'Closed',
 };
 const REMOTE_LISTENER_LABELS = {
   unconfigured: 'Setup required',
@@ -360,18 +360,17 @@ export default function HostView() {
     roomId: liveRoom?.roomId || '',
     writeKey: liveRoom?.writeKey || '',
     appState: publicLiveState,
-    enabled: autosaveReady && Boolean(liveRoom) && !roomActionPending,
-  });
-  const remoteListener = useRemoteDrawController({
-    roomId: liveRoom?.roomId || '',
-    writeKey: liveRoom?.writeKey || '',
-    enabled: autosaveReady && Boolean(liveRoom) && Boolean(remoteControl) && !roomActionPending,
+    enabled: autosaveReady && Boolean(liveRoom),
     onDraw: () => {
       setShowSettings(false);
       setHistoryPanelOpen(false);
       return drawActionRef.current();
     },
   });
+  const remoteListener = {
+    status: remoteControl ? liveSync.listenerStatus : 'idle',
+    errorMessage: remoteControl ? liveSync.errorMessage : '',
+  };
   const publicViewUrl = buildPublicViewUrl(window.location.href, liveRoom?.roomId || '');
   const remoteControlUrl = remoteControl?.roomId === liveRoom?.roomId
     ? buildRemoteControlUrl(window.location.href, remoteControl)
@@ -669,11 +668,7 @@ export default function HostView() {
 
   const createAndActivateLiveRoom = async (message) => {
     const credentials = createRoomCredentials();
-    const { error: createError } = await supabase.rpc('create_draw_room', {
-      p_room_id: credentials.roomId,
-      p_write_key: credentials.writeKey,
-    });
-    if (createError) throw createError;
+    await roomRequest(credentials.roomId, '', { method: 'POST', body: { hostKey: credentials.writeKey } });
 
     saveRoomCredentials(credentials);
     setLiveRoom(credentials);
@@ -682,8 +677,8 @@ export default function HostView() {
   };
 
   const startLiveRoom = async () => {
-    if (!isSupabaseConfigured) {
-      setError('Supabase is not configured. Add the two required environment variables and redeploy.');
+    if (!isRoomServiceConfigured) {
+      setError('The room service is not configured. Add REACT_APP_ROOM_WORKER_URL and redeploy.');
       setTimeout(() => setError(''), 5000);
       return;
     }
@@ -705,18 +700,13 @@ export default function HostView() {
     setError('');
     try {
       const credentials = createRemoteControlCredentials(liveRoom.roomId);
-      const { error: remoteError } = await supabase.rpc('enable_draw_remote_control', {
-        p_room_id: liveRoom.roomId,
-        p_write_key: liveRoom.writeKey,
-        p_remote_key: credentials.remoteKey,
-      });
-      if (remoteError) throw remoteError;
+      await roomRequest(liveRoom.roomId, 'mc', { method: 'PUT', key: liveRoom.writeKey, body: { mcKey: credentials.remoteKey } });
       saveRemoteControlCredentials(credentials);
       setRemoteControl(credentials);
       setSuccessMessage(rotated ? 'A new private MC remote link is ready.' : 'Secure MC remote control enabled.');
       setTimeout(() => setSuccessMessage(''), 3500);
     } catch (remoteError) {
-      setError(remoteError.message || 'Could not enable secure remote control. Run the latest Supabase schema and try again.');
+      setError(remoteError.message || 'Could not enable secure remote control.');
       setTimeout(() => setError(''), 6000);
     } finally {
       setRoomActionPending(false);
@@ -728,11 +718,7 @@ export default function HostView() {
     setRoomActionPending(true);
     setError('');
     try {
-      const { error: remoteError } = await supabase.rpc('disable_draw_remote_control', {
-        p_room_id: liveRoom.roomId,
-        p_write_key: liveRoom.writeKey,
-      });
-      if (remoteError) throw remoteError;
+      await roomRequest(liveRoom.roomId, 'mc', { method: 'DELETE', key: liveRoom.writeKey });
       clearRemoteControlCredentials();
       setRemoteControl(null);
       setSuccessMessage('MC remote control disabled. The old link no longer works.');
@@ -752,11 +738,7 @@ export default function HostView() {
     setError('');
 
     try {
-      const { error: closeError } = await supabase.rpc('close_draw_room', {
-        p_room_id: liveRoom.roomId,
-        p_write_key: liveRoom.writeKey,
-      });
-      if (closeError) throw closeError;
+      await roomRequest(liveRoom.roomId, 'close', { method: 'POST', key: liveRoom.writeKey });
       roomClosed = true;
 
       clearRoomCredentials();
@@ -1993,10 +1975,10 @@ export default function HostView() {
                                 <h3 className="text-lg font-bold text-[var(--text-color)]">Audience Public View</h3>
                                 <p className="text-sm text-[var(--text-muted)] mt-1">Start a secure live room, then open its public link on phones, tablets, projectors, or another computer. Only public draw results and display details are synchronized.</p>
                             </div>
-                            {!isSupabaseConfigured ? (
+                            {!isRoomServiceConfigured ? (
                                 <div role="alert" className="rounded-lg border border-amber-500/60 bg-amber-500/10 p-3 text-sm">
-                                    <p className="font-semibold text-amber-300">Supabase setup required</p>
-                                    <p className="mt-1 text-[var(--text-muted)]">Run <code>supabase/schema.sql</code>, add <code>REACT_APP_SUPABASE_URL</code> and <code>REACT_APP_SUPABASE_PUBLISHABLE_KEY</code> to Vercel, then redeploy.</p>
+                                    <p className="font-semibold text-amber-300">Room service setup required</p>
+                                    <p className="mt-1 text-[var(--text-muted)]">Add <code>REACT_APP_ROOM_WORKER_URL</code> to Vercel, then redeploy.</p>
                                 </div>
                             ) : liveRoom ? (
                                 <div className="theme-input-soft rounded-lg border border-[var(--panel-border)] p-3 space-y-2">
@@ -2027,7 +2009,7 @@ export default function HostView() {
                                     <div><p className="text-xs font-black uppercase tracking-[.18em] text-yellow-300">MC remote control</p><h4 className="mt-1 font-bold text-[var(--text-color)]">Start draws from a phone or tablet</h4></div>
                                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${remoteListener.status === 'listening' ? 'bg-emerald-500/20 text-emerald-300' : remoteListener.status === 'error' ? 'bg-red-500/20 text-red-300' : 'bg-white/10 text-[var(--text-muted)]'}`}>{REMOTE_LISTENER_LABELS[remoteListener.status] || remoteListener.status}</span>
                                 </div>
-                                <p className="text-xs leading-relaxed text-[var(--text-muted)]">This is a private bearer link for the MC. It can request the next draw but cannot see participant lists or choose a winner.</p>
+                                <p className="text-xs leading-relaxed text-[var(--text-muted)]">This private link lets the MC arm and confirm each draw from a phone or tablet. It cannot see participant lists or choose a winner.</p>
                                 {!liveRoom ? (
                                     <p className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-xs text-amber-200">Start a cross-device room before enabling remote control.</p>
                                 ) : remoteControlUrl ? (
@@ -2036,7 +2018,7 @@ export default function HostView() {
                                             <label htmlFor="remote-control-url" className="mb-1 block text-xs font-semibold">Private remote link</label>
                                             <Input id="remote-control-url" type="password" readOnly autoComplete="off" value={remoteControlUrl} onFocus={(event) => event.target.select()} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)] text-xs" />
                                         </div>
-                                        {remoteListener.errorMessage && <p role="alert" className="rounded-lg bg-red-500/10 p-2 text-xs text-red-300">{remoteListener.errorMessage}. Run the latest <code>supabase/schema.sql</code> if the remote functions are missing.</p>}
+                                        {remoteListener.errorMessage && <p role="alert" className="rounded-lg bg-red-500/10 p-2 text-xs text-red-300">{remoteListener.errorMessage}</p>}
                                         <div className="grid grid-cols-2 gap-2">
                                             <Button onClick={handleCopyRemoteControlUrl} disabled={roomActionPending} className="!bg-yellow-500 !text-slate-950 hover:!bg-yellow-400">Copy Remote</Button>
                                             <a href={remoteControlUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-cyan-600">Open Remote</a>
