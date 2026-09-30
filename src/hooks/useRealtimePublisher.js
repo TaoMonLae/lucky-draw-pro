@@ -73,6 +73,17 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
         let message;
         try { message = JSON.parse(event.data); } catch { return; }
         if (message.type === 'authorized') {
+          let localSnapshot;
+          try { localSnapshot = toPublicDrawState(stateRef.current); }
+          catch (error) { stopped = true; setStatus('error'); setListenerStatus('error'); setErrorMessage(error.message); socket.close(); return; }
+          const remoteWinners = message.snapshot?.winnersHistory || [];
+          if (remoteWinners.some((winner, index) => JSON.stringify(winner) !== JSON.stringify(localSnapshot.winnersHistory[index]))) {
+            stopped = true;
+            setStatus('error'); setListenerStatus('error');
+            setErrorMessage('This tab has an older draw history than the live room. Restore the current host session or start a new room.');
+            socket.close();
+            return;
+          }
           revisionRef.current = message.revision;
           authorizedRef.current = true;
           attempt = 0;
@@ -102,6 +113,11 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
           setStatus('error'); setErrorMessage(message.message || 'The room rejected an update.');
           if (message.message === 'Unauthorized.') {
             unavailable();
+          } else if (message.message === 'Another host tab is already connected.') {
+            stopped = true;
+            setStatus('elsewhere'); setListenerStatus('elsewhere');
+            setErrorMessage('Another host tab is already connected to this room.');
+            socket.close();
           }
         } else if (message.type === 'closed') {
           unavailable();

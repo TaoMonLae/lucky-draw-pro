@@ -171,10 +171,15 @@ export class DrawRoom extends DurableObject {
     if (roomError) { this.send(ws, { type: 'closed' }); ws.close(1000, 'Room closed'); return; }
     if (message?.type === 'auth') {
       if (!KEY.test(message.key) || !constantEqual(await digest(message.key), room.host_hash)) { this.send(ws, { type: 'error', message: 'Unauthorized.' }); ws.close(1008, 'Unauthorized'); return; }
+      if (this.hostOnline(room) && this.sockets('host').some((other) => other !== ws)) {
+        this.send(ws, { type: 'error', message: 'Another host tab is already connected.' });
+        ws.close(1008, 'Host already connected');
+        return;
+      }
       this.sockets('host').filter((other) => other !== ws).forEach((other) => other.close(1000, 'Host reconnected'));
       ws.serializeAttachment({ role: 'host' });
       this.ctx.storage.sql.exec('UPDATE room SET host_seen = ? WHERE id = 1', Date.now());
-      this.send(ws, { type: 'authorized', revision: room.revision });
+      this.send(ws, { type: 'authorized', revision: room.revision, snapshot: room.snapshot ? JSON.parse(room.snapshot) : null });
       this.broadcast(this.roomMessage(this.row()));
       return;
     }

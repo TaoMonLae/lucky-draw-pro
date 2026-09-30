@@ -68,7 +68,9 @@ try {
   audience.send({ type: 'publish', baseRevision: 0, snapshot: snapshot() });
   assert.equal((await audience.next('error')).message, 'Read only.');
   host.send({ type: 'auth', key: hostKey });
-  assert.equal((await host.next('authorized')).revision, 0);
+  const authorization = await host.next('authorized');
+  assert.equal(authorization.revision, 0);
+  assert.equal(authorization.snapshot, null);
   host.send({ type: 'publish', baseRevision: 0, snapshot: snapshot() });
   assert.equal((await host.next('published')).revision, 1);
   let audienceState;
@@ -76,6 +78,11 @@ try {
   assert.equal(audienceState.snapshot.title, 'Integration draw');
   assert.equal(audienceState.hostOnline, true);
   assert.equal((await request('/snapshot')).body.revision, 1);
+  const competingHost = await connect();
+  competingHost.send({ type: 'auth', key: hostKey });
+  assert.equal((await competingHost.next('error')).message, 'Another host tab is already connected.');
+  assert.equal((await request('/snapshot')).body.revision, 1);
+  assert.equal((await request('/snapshot')).body.hostOnline, true);
 
   const commandId = crypto.randomUUID();
   assert.equal((await request('/request', 'POST', wrongKey, { commandId, revision: 1 })).status, 403);
@@ -97,7 +104,9 @@ try {
   assert.equal((await request('/snapshot')).body.hostOnline, false);
   const reconnect = await connect();
   reconnect.send({ type: 'auth', key: hostKey });
-  assert.equal((await reconnect.next('authorized')).revision, 2);
+  const resumed = await reconnect.next('authorized');
+  assert.equal(resumed.revision, 2);
+  assert.equal(resumed.snapshot.live.lockedDigits, '4');
   assert.equal((await request('/snapshot')).body.hostOnline, true);
   assert.equal((await request('/close', 'POST', hostKey)).status, 200);
   assert.equal((await request('/snapshot')).status, 410);
@@ -118,7 +127,7 @@ try {
     assert.equal(query.status, 200);
     assert.equal((await fetch(`${expiringPath}/snapshot`)).status, 410);
   }
-  console.log('Worker integration passed: room creation, authorization, read-only audience, independent socket sync, reconnect, host presence, command deduplication, stale and drawing rejection, digit lock, seven-day expiry policy, and close.');
+  console.log('Worker integration passed: room creation, authorization, read-only audience, independent socket sync, single active host, reconnect, host presence, command deduplication, stale and drawing rejection, digit lock, seven-day expiry policy, and close.');
 } finally {
   clients.forEach(({ socket }) => socket.close());
 }

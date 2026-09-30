@@ -68,6 +68,7 @@ const LIVE_SYNC_LABELS = {
   connecting: 'Connecting…',
   syncing: 'Updating…',
   live: 'Live',
+  elsewhere: 'Open in another tab',
   error: 'Sync error',
   closed: 'Closed',
 };
@@ -76,6 +77,7 @@ const REMOTE_LISTENER_LABELS = {
   idle: 'Disabled',
   connecting: 'Connecting…',
   listening: 'Listening',
+  elsewhere: 'Other host tab',
   error: 'Listener error',
 };
 const SETTINGS_SECTIONS = [
