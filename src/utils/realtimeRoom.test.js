@@ -37,6 +37,8 @@ describe('realtime room credentials', () => {
       removeItem: (key) => values.delete(key),
     };
     const credentials = { roomId, writeKey };
+    values.set('lucky-draw-live-room', JSON.stringify(credentials));
+    expect(loadRoomCredentials(storage)).toBeNull();
     saveRoomCredentials(credentials, storage);
     expect(loadRoomCredentials(storage)).toEqual(credentials);
     expect(values.has(LIVE_ROOM_STORAGE_KEY)).toBe(true);

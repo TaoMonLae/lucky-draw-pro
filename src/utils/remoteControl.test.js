@@ -44,6 +44,8 @@ describe('remote control credentials', () => {
       removeItem: (key) => values.delete(key),
     };
     const credentials = { roomId, remoteKey };
+    values.set('lucky-draw-remote-control', JSON.stringify(credentials));
+    expect(loadRemoteControlCredentials(storage)).toBeNull();
     saveRemoteControlCredentials(credentials, storage);
     expect(values.has(REMOTE_CONTROL_STORAGE_KEY)).toBe(true);
     expect(loadRemoteControlCredentials(storage)).toEqual(credentials);

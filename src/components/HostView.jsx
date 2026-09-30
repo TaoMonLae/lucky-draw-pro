@@ -366,6 +366,12 @@ export default function HostView() {
       setHistoryPanelOpen(false);
       return drawActionRef.current();
     },
+    onUnavailable: () => {
+      clearRoomCredentials();
+      clearRemoteControlCredentials();
+      setLiveRoom(null);
+      setRemoteControl(null);
+    },
   });
   const remoteListener = {
     status: remoteControl ? liveSync.listenerStatus : 'idle',

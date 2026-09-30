@@ -1,4 +1,5 @@
-export const REMOTE_CONTROL_STORAGE_KEY = 'lucky-draw-remote-control';
+// MC credentials from the former room service cannot authorize a Cloudflare room.
+export const REMOTE_CONTROL_STORAGE_KEY = 'lucky-draw-cloudflare-remote-v1';
 
 export function isHostReadyForRemoteDraw({
   drawing = false,

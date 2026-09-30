@@ -18,7 +18,9 @@ export async function roomRequest(roomId, action, { method = 'GET', key = '', bo
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok && !Object.prototype.hasOwnProperty.call(result, 'accepted')) {
-    throw new Error(result.error || 'The room service request failed.');
+    const error = new Error(result.error || 'The room service request failed.');
+    error.status = response.status;
+    throw error;
   }
   return result;
 }

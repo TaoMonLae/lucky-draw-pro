@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { isRoomServiceConfigured, roomSocketUrl } from '../lib/roomApi';
+import { isRoomServiceConfigured, roomRequest, roomSocketUrl } from '../lib/roomApi';
 import { toPublicDrawState } from '../utils/realtimeRoom';
 
-export function useRealtimePublisher({ roomId, writeKey, appState, enabled = true, onDraw }) {
+export function useRealtimePublisher({ roomId, writeKey, appState, enabled = true, onDraw, onUnavailable }) {
   const [status, setStatus] = useState(isRoomServiceConfigured ? 'idle' : 'unconfigured');
   const [errorMessage, setErrorMessage] = useState('');
   const [listenerStatus, setListenerStatus] = useState('idle');
   const socketRef = useRef(null);
   const onDrawRef = useRef(onDraw);
+  const onUnavailableRef = useRef(onUnavailable);
   const stateRef = useRef(appState);
   const revisionRef = useRef(0);
   const sentRef = useRef('');
@@ -16,6 +17,7 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
   const authorizedRef = useRef(false);
   const publishRef = useRef(() => {});
   onDrawRef.current = onDraw;
+  onUnavailableRef.current = onUnavailable;
   stateRef.current = appState;
 
   publishRef.current = () => {
@@ -46,13 +48,26 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
     let heartbeatTimer;
     let attempt = 0;
     sentRef.current = '';
+    const unavailable = () => {
+      stopped = true;
+      setStatus('idle'); setListenerStatus('idle'); setErrorMessage('');
+      onUnavailableRef.current?.();
+      socket?.close();
+    };
+    const retry = () => {
+      if (stopped) return;
+      setStatus('connecting'); setListenerStatus('connecting');
+      reconnectTimer = setTimeout(connect, Math.min(1000 * (2 ** attempt++), 10000));
+    };
     const connect = () => {
       if (stopped) return;
       setStatus('connecting'); setListenerStatus('connecting');
-      socket = new WebSocket(roomSocketUrl(roomId));
-      socketRef.current = socket;
-      authorizedRef.current = false;
-      queuedRef.current = false;
+      roomRequest(roomId, 'snapshot').then(() => {
+        if (stopped) return;
+        socket = new WebSocket(roomSocketUrl(roomId));
+        socketRef.current = socket;
+        authorizedRef.current = false;
+        queuedRef.current = false;
       socket.onopen = () => socket.send(JSON.stringify({ type: 'auth', key: writeKey }));
       socket.onmessage = (event) => {
         let message;
@@ -86,14 +101,10 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
           queuedRef.current = false;
           setStatus('error'); setErrorMessage(message.message || 'The room rejected an update.');
           if (message.message === 'Unauthorized.') {
-            stopped = true;
-            setListenerStatus('error');
-            socket.close();
+            unavailable();
           }
         } else if (message.type === 'closed') {
-          stopped = true;
-          setStatus('error'); setListenerStatus('error'); setErrorMessage('This room has closed. Start a new room.');
-          socket.close();
+          unavailable();
         }
       };
       socket.onerror = () => { setStatus('error'); setErrorMessage('Connection to the room service was interrupted.'); };
@@ -101,10 +112,14 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
         clearInterval(heartbeatTimer);
         authorizedRef.current = false;
         queuedRef.current = false;
-        if (stopped) return;
-        setStatus('connecting'); setListenerStatus('connecting');
-        reconnectTimer = setTimeout(connect, Math.min(1000 * (2 ** attempt++), 10000));
+        retry();
       };
+      }).catch((error) => {
+        if (stopped) return;
+        if (error.status === 404 || error.status === 410) { unavailable(); return; }
+        setStatus('error'); setErrorMessage('Connection to the room service was interrupted.');
+        retry();
+      });
     };
     connect();
     return () => {

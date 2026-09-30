@@ -1,6 +1,7 @@
 import { isValidSessionData } from './validation';
 
-export const LIVE_ROOM_STORAGE_KEY = 'lucky-draw-live-room';
+// Do not reuse credentials for rooms created by the former Supabase service.
+export const LIVE_ROOM_STORAGE_KEY = 'lucky-draw-cloudflare-room-v1';
 export const MAX_PUBLIC_STATE_CHARS = 750_000;
 const PUBLIC_THEMES = ['Event Night', 'Corporate Blue', 'Carnival Red', 'Neon Party'];
 const PUBLIC_FINALE_PHASES = ['idle', 'build', 'reveal', 'carousel'];
