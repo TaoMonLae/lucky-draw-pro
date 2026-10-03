@@ -71,6 +71,7 @@ try {
   const authorization = await host.next('authorized');
   assert.equal(authorization.revision, 0);
   assert.equal(authorization.snapshot, null);
+  assert.ok(authorization.capabilities.includes('winner-index'));
   host.send({ type: 'publish', baseRevision: 0, snapshot: snapshot() });
   assert.equal((await host.next('published')).revision, 1);
   let audienceState;
@@ -108,6 +109,14 @@ try {
   assert.equal(resumed.revision, 2);
   assert.equal(resumed.snapshot.live.lockedDigits, '4');
   assert.equal((await request('/snapshot')).body.hostOnline, true);
+  reconnect.send({ type: 'publish', baseRevision: 2, snapshot: snapshot({ drawing: true, drawingWinnerIndex: 1, lockedDigitCount: 0, lockedDigits: '', displayValue: '00' }) });
+  assert.equal((await reconnect.next('published')).revision, 3);
+  reconnect.send({ type: 'publish', baseRevision: 3, snapshot: snapshot({ drawing: true, drawingWinnerIndex: 1, lockedDigitCount: 1, lockedDigits: '8', displayValue: '81' }) });
+  assert.equal((await reconnect.next('published')).revision, 4);
+  reconnect.send({ type: 'publish', baseRevision: 4, snapshot: snapshot({ drawing: true, drawingWinnerIndex: 1, lockedDigitCount: 1, lockedDigits: '9', displayValue: '91' }) });
+  assert.equal((await reconnect.next('error')).message, 'Locked digits cannot change.');
+  reconnect.send({ type: 'publish', baseRevision: 4, snapshot: snapshot({ drawing: false, lockedDigitCount: 0, lockedDigits: '' }) });
+  assert.equal((await reconnect.next('published')).revision, 5);
   assert.equal((await request('/close', 'POST', hostKey)).status, 200);
   assert.equal((await request('/snapshot')).status, 410);
   assert.equal((await audience.next('closed')).type, 'closed');

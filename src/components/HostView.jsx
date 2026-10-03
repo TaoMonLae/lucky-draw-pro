@@ -95,6 +95,7 @@ export default function HostView() {
 
   // State
   const [drawing, setDrawing] = useState(false);
+  const [drawingWinnerIndex, setDrawingWinnerIndex] = useState(0);
   const [winnersHistory, setWinnersHistory] = useState([]);
   const [showConfetti, setShowConfetti] = useState(false);
   const [currentPrize, setCurrentPrize] = useState('');
@@ -245,6 +246,7 @@ export default function HostView() {
   const publicLiveState = useMemo(() => ({
     ...appState,
     drawing,
+    drawingWinnerIndex,
     isCharging,
     chargeProgress: publicChargeProgress,
     currentPrize: operationMode !== 'standard'
@@ -253,8 +255,8 @@ export default function HostView() {
         ? currentPrize
         : prizes[winnersHistory.length]?.name || currentPrize,
     publicDisplayValue: publicDisplay.value,
-    lockedDigitCount: publicDisplay.lockedDigits.length,
-    lockedDigits: publicDisplay.lockedDigits,
+    lockedDigitCount: lockedDigits.length,
+    lockedDigits,
     grandFinalePhase,
     celebrationIndex,
     celebrationPlaying,
@@ -272,7 +274,7 @@ export default function HostView() {
     totalEntries: initialEntries.length,
     remainingEntriesCount: publicRemainingEntriesCount,
   }), [
-    appState, drawing, currentPrize, publicDisplay, grandFinalePhase, celebrationIndex, celebrationPlaying,
+    appState, drawing, drawingWinnerIndex, currentPrize, publicDisplay, lockedDigits, grandFinalePhase, celebrationIndex, celebrationPlaying,
     showConfetti, isCharging, publicChargeProgress, operationMode, winnersHistory.length,
     prizes, initialEntries.length, publicRemainingEntriesCount, liveRoom, remoteControl,
   ]);
@@ -280,16 +282,26 @@ export default function HostView() {
   // --- SESSION MANAGEMENT ---
 
   const restoreSession = (data, { announce = true } = {}) => {
+    if (drawLockRef.current) return;
     try {
         if (!isValidSessionData(data)) {
             throw new Error("Invalid session data structure.");
         }
+        resetDraw(data.initialEntries);
+        importRequestRef.current += 1;
+        setPendingImport(null);
+        setDuplicateGroups([]);
+        setBlankEntriesRemoved(0);
+        setParticipantSearch('');
         setInitialEntries(data.initialEntries ?? []);
-        setRemainingEntries(data.remainingEntries ?? data.initialEntries ?? []);
+        const pastWinners = new Set((data.winnersHistory || []).flatMap((group) => group.tickets));
+        setRemainingEntries(data.remainingEntries ?? (data.winnerEligibilityMode === 'keep'
+          ? data.initialEntries
+          : data.initialEntries.filter((entry) => !pastWinners.has(entry))));
         setWinnersHistory(data.winnersHistory ?? []);
         setPrizes(data.prizes ?? [{ id: 1, name: '3rd Prize' }, { id: 2, name: '2nd Prize' }, { id: 3, name: '1st Prize' }]);
-        setInputValue(data.inputValue ?? data.initialEntries.join(', '));
-        const restoredMaxDigits = data.maxDigits ?? 2;
+        setInputValue(data.inputValue ?? formatEntriesForInput(data.initialEntries));
+        const restoredMaxDigits = data.maxDigits ?? data.initialEntries.reduce((width, entry) => Math.min(10, Math.max(width, entry.length)), 1);
         setMaxDigits(restoredMaxDigits);
         setTitle(data.title ?? 'Live Lucky Draw');
         setSubtitle(data.subtitle ?? 'The most exciting draw on the web!');
@@ -434,11 +446,11 @@ export default function HostView() {
 
   useEffect(() => {
     if(sfxVolumeNode.current) sfxVolumeNode.current.volume.value = sfxVolume;
-  }, [sfxVolume]);
+  }, [sfxVolume, scriptsLoaded.tone]);
 
   useEffect(() => {
     if(musicVolumeNode.current) musicVolumeNode.current.volume.value = musicVolume;
-  }, [musicVolume]);
+  }, [musicVolume, scriptsLoaded.tone]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -534,11 +546,14 @@ export default function HostView() {
             setMaxDigits(maxLength);
             const paddedEntries = entries.map(t => t.padStart(maxLength, '0'));
             setInitialEntries(paddedEntries);
-            resetDraw(paddedEntries, maxLength);
+            resetDraw(paddedEntries);
         } else {
             setInitialEntries(entries);
             resetDraw(entries);
         }
+    } else {
+      setInitialEntries([]);
+      resetDraw([]);
     }
 
     setDuplicateGroups(duplicates);
@@ -554,13 +569,16 @@ export default function HostView() {
     processEntries(entries, { duplicateGroups: duplicates, blankCount });
   };
 
-  const resetDraw = (entriesToUse = initialEntries, newMaxDigits = maxDigits) => {
+  const resetDraw = (entriesToUse = initialEntries) => {
+    stopCharging();
     stopCelebrationAudio();
     setRemainingEntries(entriesToUse);
     setWinnersHistory([]);
     const firstEntry = entriesToUse[0] || (drawMode === 'numbers' ? '1' : 'Winner');
     setAuditLog([]);
     setDisplayValue(firstEntry);
+    setLockedDigits('');
+    setDrawingWinnerIndex(0);
     setCurrentPrize('');
     setError('');
     setShowConfetti(false);
@@ -571,7 +589,8 @@ export default function HostView() {
   };
   
   const handleUndo = () => {
-    if (auditLog.length === 0 || drawing) return;
+    if (auditLog.length === 0 || drawing || drawLockRef.current) return;
+    stopCharging();
     stopCelebrationAudio();
     const lastEntry = auditLog[auditLog.length - 1];
     setAuditLog(auditLog.slice(0, -1));
@@ -590,6 +609,7 @@ export default function HostView() {
     }
 
     setError('');
+    setLockedDigits('');
     setShowConfetti(false);
     setGrandFinalePhase('idle');
     setCelebrationIndex(0);
@@ -818,6 +838,10 @@ export default function HostView() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
+      if (drawLockRef.current) {
+        setError('Wait for the current draw to finish before loading a session.');
+        return;
+      }
       const { data, error: parseError } = parseSessionJson(event.target.result);
       if (parseError) {
         setError(parseError);
@@ -826,6 +850,7 @@ export default function HostView() {
         restoreSession(data);
       }
     };
+    reader.onerror = () => setError('Could not read the session file. Please try again.');
     reader.readAsText(file);
     e.target.value = null;
   };
@@ -897,44 +922,28 @@ export default function HostView() {
 
   const updateEntryAt = (indexToUpdate, value) => {
     const nextValue = value.trim();
-    if (!nextValue) return;
+    if (!nextValue || nextValue === initialEntries[indexToUpdate] || drawLockRef.current) return;
 
     const nextEntries = initialEntries.map((entry, idx) => (idx === indexToUpdate ? nextValue : entry));
-    const normalized = parseEntries(nextEntries.join(', '), drawMode);
+    const normalized = parseEntries(formatEntriesForInput(nextEntries), drawMode);
     if (normalized.error) {
       setError(normalized.error);
       return;
     }
-    setInputValue(nextEntries.join(', '));
+    setInputValue(formatEntriesForInput(normalized.entries));
     processEntries(normalized.entries, { duplicateGroups: normalized.duplicateGroups, blankCount: normalized.blankCount });
   };
 
   const removeEntryAt = (indexToRemove) => {
     const nextEntries = initialEntries.filter((_, idx) => idx !== indexToRemove);
-    setInputValue(nextEntries.join(', '));
-
-    if (nextEntries.length === 0) {
-      setInitialEntries([]);
-      setRemainingEntries([]);
-      setDisplayValue(drawMode === 'numbers' ? '1' : 'Winner');
-      setDuplicateGroups([]);
-      return;
-    }
+    setInputValue(formatEntriesForInput(nextEntries));
 
     processEntries(nextEntries);
   };
 
   const removeDuplicateGroup = (kept) => {
     const nextEntries = initialEntries.filter((entry) => entry !== kept);
-    setInputValue(nextEntries.join(', '));
-
-    if (nextEntries.length === 0) {
-      setInitialEntries([]);
-      setRemainingEntries([]);
-      setDisplayValue(drawMode === 'numbers' ? '1' : 'Winner');
-      setDuplicateGroups([]);
-      return;
-    }
+    setInputValue(formatEntriesForInput(nextEntries));
 
     processEntries(nextEntries);
   };
@@ -1061,6 +1070,15 @@ export default function HostView() {
     if (scriptsLoaded.tone && !audioStarted.current) {
       await Tone.start();
       audioStarted.current = true;
+    }
+  };
+
+  const previewAudio = async (play) => {
+    try {
+      await ensureAudioStarted();
+      play();
+    } catch {
+      setError('Audio could not start. Please try again.');
     }
   };
 
@@ -1225,6 +1243,10 @@ export default function HostView() {
     if (drawLockRef.current || drawing) return;
     drawLockRef.current = true;
     stopCharging();
+    setDrawing(true);
+    setDrawingWinnerIndex(0);
+    setLockedDigits('');
+    setError('');
 
     try {
       await ensureAudioStarted();
@@ -1276,6 +1298,10 @@ export default function HostView() {
     }
 
     const sourcePool = getEligibleEntries(remainingEntries);
+    if (drawMode === 'numbers' && sourcePool.some((entry) => !/^\d{1,10}$/.test(entry))) {
+      setError('Number draws require tickets with 1–10 digits. Update the participants or choose Names.');
+      return;
+    }
     const numToDraw = Math.min(winnersPerPrize, sourcePool.length);
     if (drawing || numToDraw === 0 || winnersHistory.length >= prizes.length) {
         if (sourcePool.length === 0) setError('All entries have been drawn!');
@@ -1314,6 +1340,7 @@ export default function HostView() {
     const drawnTickets = selectRandomEntries(sourcePool, numToDraw);
 
     for (let i = 0; i < drawnTickets.length; i++) {
+        setDrawingWinnerIndex(i);
         const ticket = drawnTickets[i];
         const isFinalWinnerOfBatch = i === drawnTickets.length - 1;
         await runSingleWinnerAnimation(ticket, isFinalWinnerOfBatch);
@@ -1821,7 +1848,10 @@ export default function HostView() {
                                             <Input
                                               type="text"
                                               defaultValue={entry}
-                                              onBlur={(e) => updateEntryAt(index, e.target.value)}
+                                              onBlur={(e) => {
+                                                updateEntryAt(index, e.target.value);
+                                                e.target.value = entry;
+                                              }}
                                               className="bg-[var(--input-bg)] border-[var(--panel-border)]"
                                               disabled={drawing}
                                             />
@@ -1903,11 +1933,11 @@ export default function HostView() {
                                 <label className="font-semibold text-sm mb-1 block">Prize List</label>
                                 {prizes.map((prize, index) => (
                                     <div key={prize.id} className="flex items-center gap-2 mb-2">
-                                        <Input type="text" value={prize.name} disabled={drawing} onChange={e => {
+                                        <Input type="text" value={prize.name} disabled={drawing || index < winnersHistory.length} onChange={e => {
                                             const nextName = e.target.value;
                                             setPrizes((currentPrizes) => updatePrizeName(currentPrizes, index, nextName));
                                         }} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" />
-                                        <Button aria-label={`Remove ${prize.name || 'prize'}`} disabled={drawing} onClick={() => setPrizes(prizes.filter(p => p.id !== prize.id))} className="!bg-red-600 text-xs !p-2">X</Button>
+                                        <Button aria-label={`Remove ${prize.name || 'prize'}`} disabled={drawing || index < winnersHistory.length} onClick={() => setPrizes(prizes.filter((_, prizeIndex) => prizeIndex !== index))} className="!bg-red-600 text-xs !p-2">X</Button>
                                     </div>
                                 ))}
                                 <Button onClick={() => setPrizes([...prizes, {id: Date.now(), name: `New Prize`}])} disabled={drawing} className="w-full text-sm !bg-gray-600 hover:!bg-gray-700">Add Prize</Button>
@@ -1915,7 +1945,7 @@ export default function HostView() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label htmlFor="winners-per-prize" className="font-semibold text-sm mb-1 block">Winners per Prize</label>
-                                    <Input id="winners-per-prize" type="number" value={winnersPerPrize} onChange={(e) => setWinnersPerPrize(Math.max(1, parseInt(e.target.value, 10) || 1))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} min="1" />
+                                    <Input id="winners-per-prize" type="number" value={winnersPerPrize} onChange={(e) => setWinnersPerPrize(Math.min(MAX_ENTRIES, Math.max(1, parseInt(e.target.value, 10) || 1)))} className="w-full bg-[var(--input-bg)] border-[var(--panel-border)]" disabled={drawing} min="1" max={MAX_ENTRIES} />
                                 </div>
                             </div>
                         </div>
@@ -1971,8 +2001,8 @@ export default function HostView() {
                                 <h3 className="text-lg font-bold text-[var(--text-color)] mb-1">Cue Preview</h3>
                                 <p className="mb-3 text-xs text-[var(--text-muted)]">Preview the regular-prize build and layered Magnific celebration.</p>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <Button onClick={playDrumroll} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Drumroll</Button>
-                                    <Button onClick={playCelebration} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Prize Reveal</Button>
+                                    <Button onClick={() => previewAudio(playDrumroll)} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Drumroll</Button>
+                                    <Button onClick={() => previewAudio(playCelebration)} disabled={drawing} style={{backgroundColor: 'var(--button-primary-bg)'}}>Prize Reveal</Button>
                                 </div>
                             </div>
                         </div>

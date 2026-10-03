@@ -63,10 +63,12 @@ export class DrawRoom extends DurableObject {
     return [room, null];
   }
   async authorized(request, field) {
+    const key = request.headers.get('Authorization')?.replace(/^Bearer /i, '') || '';
+    if (!KEY.test(key)) return [null, fail('Unauthorized.', 403)];
+    const hash = await digest(key);
     const [room, error] = this.active();
     if (error) return [null, error];
-    const key = request.headers.get('Authorization')?.replace(/^Bearer /i, '') || '';
-    if (!KEY.test(key) || !room[field] || !constantEqual(await digest(key), room[field])) {
+    if (!room[field] || !constantEqual(hash, room[field])) {
       return [null, fail('Unauthorized.', 403)];
     }
     return [room, null];
@@ -121,12 +123,13 @@ export class DrawRoom extends DurableObject {
       return error || json(this.roomMessage(room));
     }
     if (url.pathname === '/mc' && request.method === 'PUT') {
-      const [room, error] = await this.authorized(request, 'host_hash');
-      if (error) return error;
       let body;
       try { body = await parse(request); } catch { return fail('Invalid request.'); }
       if (!KEY.test(body?.mcKey)) return fail('Invalid MC credential.');
-      this.ctx.storage.sql.exec('UPDATE room SET mc_hash = ?, pending_id = NULL WHERE id = 1', await digest(body.mcKey));
+      const hash = await digest(body.mcKey);
+      const [, error] = await this.authorized(request, 'host_hash');
+      if (error) return error;
+      this.ctx.storage.sql.exec('UPDATE room SET mc_hash = ?, pending_id = NULL WHERE id = 1', hash);
       return json({ enabled: true });
     }
     if (url.pathname === '/mc' && request.method === 'DELETE') {
@@ -142,11 +145,11 @@ export class DrawRoom extends DurableObject {
       return json({ closed: true });
     }
     if (url.pathname === '/request' && request.method === 'POST') {
-      const [, error] = await this.authorized(request, 'mc_hash');
-      if (error) return error;
       let body;
       try { body = await parse(request); } catch { return fail('Invalid request.'); }
       if (!COMMAND.test(body?.commandId) || !Number.isInteger(body?.revision)) return fail('Invalid command.');
+      const [, error] = await this.authorized(request, 'mc_hash');
+      if (error) return error;
       if (this.ctx.storage.sql.exec('SELECT id FROM commands WHERE id = ?', body.commandId).toArray().length) return json({ accepted: false, message: 'Duplicate draw request.' }, 409);
       const room = this.row();
       const state = room.snapshot ? JSON.parse(room.snapshot) : null;
@@ -167,10 +170,13 @@ export class DrawRoom extends DurableObject {
     if (typeof raw !== 'string' || raw.length > 850_000) { this.send(ws, { type: 'error', message: 'Invalid message.' }); return; }
     let message;
     try { message = JSON.parse(raw); } catch { this.send(ws, { type: 'error', message: 'Invalid message.' }); return; }
-    const [room, roomError] = this.active();
+    let [room, roomError] = this.active();
     if (roomError) { this.send(ws, { type: 'closed' }); ws.close(1000, 'Room closed'); return; }
     if (message?.type === 'auth') {
-      if (!KEY.test(message.key) || !constantEqual(await digest(message.key), room.host_hash)) { this.send(ws, { type: 'error', message: 'Unauthorized.' }); ws.close(1008, 'Unauthorized'); return; }
+      const hash = KEY.test(message.key) ? await digest(message.key) : '';
+      [room, roomError] = this.active();
+      if (roomError) { this.send(ws, { type: 'closed' }); ws.close(1000, 'Room closed'); return; }
+      if (!hash || !constantEqual(hash, room.host_hash)) { this.send(ws, { type: 'error', message: 'Unauthorized.' }); ws.close(1008, 'Unauthorized'); return; }
       if (this.hostOnline(room) && this.sockets('host').some((other) => other !== ws)) {
         this.send(ws, { type: 'error', message: 'Another host tab is already connected.' });
         ws.close(1008, 'Host already connected');
@@ -179,7 +185,7 @@ export class DrawRoom extends DurableObject {
       this.sockets('host').filter((other) => other !== ws).forEach((other) => other.close(1000, 'Host reconnected'));
       ws.serializeAttachment({ role: 'host' });
       this.ctx.storage.sql.exec('UPDATE room SET host_seen = ? WHERE id = 1', Date.now());
-      this.send(ws, { type: 'authorized', revision: room.revision, snapshot: room.snapshot ? JSON.parse(room.snapshot) : null });
+      this.send(ws, { type: 'authorized', revision: room.revision, snapshot: room.snapshot ? JSON.parse(room.snapshot) : null, capabilities: ['winner-index'] });
       this.broadcast(this.roomMessage(this.row()));
       return;
     }
@@ -196,7 +202,8 @@ export class DrawRoom extends DurableObject {
     const previous = room.snapshot ? JSON.parse(room.snapshot) : null;
     const oldDigits = previous?.live?.lockedDigits || '';
     const newDigits = message.snapshot?.live?.lockedDigits || '';
-    if (previous?.live?.drawing && !newDigits.startsWith(oldDigits)) {
+    const sameWinner = (message.snapshot.live?.drawingWinnerIndex || 0) <= (previous?.live?.drawingWinnerIndex || 0);
+    if (previous?.live?.drawing && message.snapshot.live?.drawing && sameWinner && !newDigits.startsWith(oldDigits)) {
       this.send(ws, { type: 'error', message: 'Locked digits cannot change.' }); return;
     }
     const snapshot = JSON.stringify(message.snapshot);

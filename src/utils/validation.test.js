@@ -173,3 +173,16 @@ describe('parseSessionJson', () => {
     expect(data).toEqual(session);
   });
 });
+
+test('rejects duplicate or blank participants and invalid remaining pools', () => {
+  expect(isValidSessionData({ initialEntries: ['Alice', ' alice '] })).toBe(false);
+  expect(isValidSessionData({ initialEntries: ['01', '1'], drawMode: 'numbers' })).toBe(false);
+  expect(isValidSessionData({ initialEntries: [''] })).toBe(false);
+  expect(isValidSessionData({ initialEntries: ['Alice'], remainingEntries: ['Bob'] })).toBe(false);
+  expect(isValidSessionData({ initialEntries: ['Alice'], remainingEntries: ['Alice', 'Alice'] })).toBe(false);
+});
+
+test('rejects duplicate and non-primitive prize identifiers', () => {
+  expect(isValidSessionData({ initialEntries: [], prizes: [{ id: {}, name: 'Prize' }] })).toBe(false);
+  expect(isValidSessionData({ initialEntries: [], prizes: [{ id: 1, name: 'A' }, { id: '1', name: 'B' }] })).toBe(false);
+});

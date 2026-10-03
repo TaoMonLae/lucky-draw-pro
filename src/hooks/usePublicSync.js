@@ -11,6 +11,8 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
 
   useEffect(() => {
     if (roomId) return undefined;
+    setDrawState(null);
+    setRevision(0);
     const updateState = () => {
       try {
         const savedState = localStorage.getItem(storageKey);
@@ -36,7 +38,7 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
 
   useEffect(() => {
     if (!roomId) { setSyncStatus('local'); setErrorMessage(''); return undefined; }
-    if (!isRoomServiceConfigured) { setSyncStatus('unconfigured'); setErrorMessage('The room service is not configured.'); return undefined; }
+    if (!isRoomServiceConfigured) { setDrawState(null); setSyncStatus('unconfigured'); setErrorMessage('The room service is not configured.'); return undefined; }
     let stopped = false;
     let closed = false;
     let socket;
@@ -58,19 +60,23 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
       if (stopped || closed) return;
       setSyncStatus('connecting');
       socket = new WebSocket(roomSocketUrl(roomId));
-      socket.onopen = () => { attempt = 0; clearInterval(presenceTimer); presenceTimer = setInterval(refreshPresence, 1000); };
+      const connection = socket;
+      const isCurrent = () => !stopped && !closed && socket === connection;
+      socket.onopen = () => { if (!isCurrent()) return; attempt = 0; clearInterval(presenceTimer); presenceTimer = setInterval(refreshPresence, 1000); };
       socket.onmessage = (event) => {
+        if (!isCurrent()) return;
         let message;
         try { message = JSON.parse(event.data); } catch { return; }
+        if (!message || typeof message !== 'object') return;
         if (message.type === 'closed' || (message.type === 'state' && message.status === 'closed')) {
           closed = true; setDrawState(null); setSyncStatus('closed'); setErrorMessage('This room has closed. Ask for a new public link.');
           socket.close(); return;
         }
         if (message.type === 'state') {
-          if (message.revision >= lastRevision && (!message.snapshot || isValidPublicDrawState(message.snapshot))) {
+          if (Number.isInteger(message.revision) && message.revision >= lastRevision && (!message.snapshot || isValidPublicDrawState(message.snapshot))) {
             lastRevision = message.revision;
             setRevision(message.revision);
-            if (message.snapshot) { setDrawState(message.snapshot); drawing = Boolean(message.snapshot.live?.drawing); }
+            setDrawState(message.snapshot || null); drawing = Boolean(message.snapshot?.live?.drawing);
           }
           hostOnline = Boolean(message.hostOnline); hostSeen = message.hostSeen || 0;
           refreshPresence();
@@ -79,19 +85,20 @@ export function usePublicSync({ roomId = '', storageKey = 'lucky-draw-autosave',
           refreshPresence();
         }
       };
-      socket.onerror = () => { setSyncStatus('error'); setErrorMessage('The live room connection was interrupted.'); };
+      socket.onerror = () => { if (!isCurrent()) return; setSyncStatus('error'); setErrorMessage('The live room connection was interrupted.'); };
       socket.onclose = async () => {
+        if (!isCurrent()) return;
         clearInterval(presenceTimer);
         if (stopped || closed) return;
         try { await roomRequest(roomId, 'snapshot'); }
         catch (error) {
           if (stopped || closed) return;
-          if (/closed|expired/i.test(error.message)) {
+          if (error.status === 410 || /closed|expired/i.test(error.message)) {
             closed = true; setDrawState(null); setSyncStatus('closed'); setErrorMessage('This room has closed. Ask for a new public link.');
             return;
           }
-          if (/not found/i.test(error.message)) {
-            closed = true; setSyncStatus('error'); setErrorMessage('This room does not exist. Check the public link.');
+          if (error.status === 404 || /not found/i.test(error.message)) {
+            closed = true; setDrawState(null); setSyncStatus('error'); setErrorMessage('This room does not exist. Check the public link.');
             return;
           }
         }

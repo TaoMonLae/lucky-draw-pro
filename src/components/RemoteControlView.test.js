@@ -40,7 +40,7 @@ describe('RemoteControlView', () => {
         },
       },
     });
-    roomRequest.mockResolvedValue({ accepted: true });
+    roomRequest.mockResolvedValue({ error: null });
   });
 
   afterEach(() => {
@@ -70,7 +70,9 @@ describe('RemoteControlView', () => {
 
   test('shows a structured host rejection without starting a response timeout', async () => {
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-    roomRequest.mockResolvedValueOnce({ accepted: false, message: 'The host is not ready' });
+    roomRequest.mockResolvedValueOnce({
+      accepted: false, message: 'The host is not ready',
+    });
     render(<RemoteControlView credentials={credentials} />);
     fireEvent.click(screen.getByRole('button', { name: 'Arm next draw' }));
 
@@ -137,4 +139,63 @@ describe('RemoteControlView', () => {
     expect(screen.getByRole('button', { name: 'Arm next draw' })).toBeTruthy();
     expect(roomRequest).not.toHaveBeenCalled();
   });
+
+  test('a late RPC response does not overwrite a completed draw', async () => {
+    let finishRequest;
+    roomRequest.mockImplementationOnce(() => new Promise((resolve) => { finishRequest = resolve; }));
+    const { rerender } = render(<RemoteControlView credentials={credentials} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Arm next draw' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start draw' }));
+    const initial = usePublicSync.mock.results[0].value;
+    usePublicSync.mockReturnValue({ ...initial, drawState: { ...initial.drawState,
+      live: { ...initial.drawState.live, drawing: true },
+    } });
+    rerender(<RemoteControlView credentials={credentials} />);
+    usePublicSync.mockReturnValue({ ...initial, drawState: { ...initial.drawState,
+      live: { ...initial.drawState.live, drawing: false, completedPrizeCount: 1 },
+    } });
+    rerender(<RemoteControlView credentials={credentials} />);
+    await act(async () => finishRequest({ data: { accepted: true }, error: null }));
+    act(() => jest.advanceTimersByTime(14000));
+    expect(screen.getByText('Reveal complete. Ready for the next draw.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Arm next draw' }).disabled).toBe(false);
+  });
+
+  test('recognizes results even when the drawing animation update was missed', async () => {
+    const { rerender } = render(<RemoteControlView credentials={credentials} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Arm next draw' }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Start draw' })));
+    const initial = usePublicSync.mock.results[0].value;
+    usePublicSync.mockReturnValue({ ...initial, drawState: { ...initial.drawState,
+      live: { ...initial.drawState.live, completedPrizeCount: 1 },
+    } });
+    rerender(<RemoteControlView credentials={credentials} />);
+    act(() => jest.advanceTimersByTime(14000));
+    expect(screen.getByText('Reveal complete. Ready for the next draw.')).toBeTruthy();
+  });
+
+  test('a response arriving after unmount cannot create an orphan timeout', async () => {
+    let finishRequest;
+    roomRequest.mockImplementationOnce(() => new Promise((resolve) => { finishRequest = resolve; }));
+    const { unmount } = render(<RemoteControlView credentials={credentials} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Arm next draw' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start draw' }));
+    unmount();
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    await act(async () => finishRequest({ error: null }));
+    expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === 13000)).toBe(false);
+    setTimeoutSpy.mockRestore();
+  });
+
+
+  test('room errors take precedence over old request feedback', async () => {
+    const { rerender } = render(<RemoteControlView credentials={credentials} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Arm next draw' }));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Start draw' })));
+    usePublicSync.mockReturnValue({ drawState: null, syncStatus: 'closed', errorMessage: 'Room closed. Ask for a new link.' });
+    rerender(<RemoteControlView credentials={credentials} />);
+    expect(screen.getByRole('alert').textContent).toBe('Room closed. Ask for a new link.');
+    expect(screen.getByRole('button', { name: 'Arm next draw' }).disabled).toBe(true);
+  });
+
 });

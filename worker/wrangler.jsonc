@@ -1,5 +1,5 @@
 {
-  "$schema": "../node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "lucky-draw-pro-rooms",
   "account_id": "6fb14440d4951cac8999ea98d47485df",
   "main": "src/index.js",

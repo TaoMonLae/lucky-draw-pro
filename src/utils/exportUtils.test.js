@@ -100,3 +100,7 @@ describe('downloadCsv (CSV escaping)', () => {
       .toBe('"\'=HYPERLINK(""https://example.test"")",\'+1,\'-2,\'@name');
   });
 });
+
+test('quotes carriage returns and neutralizes formulas after line breaks', () => {
+  expect(serializeCsv([['Alice\rBob', '\n=1+1']])).toBe('"Alice\rBob","\'\n=1+1"');
+});

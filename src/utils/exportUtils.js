@@ -14,8 +14,8 @@ export function serializeCsv(rows) {
       row.map(cell => {
         let str = String(cell == null ? '' : cell);
         // Prevent spreadsheet apps from evaluating participant-controlled cells as formulas.
-        if (/^[\t\r ]*[=+\-@]/.test(str)) str = `'${str}`;
-        if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+        if (/^\s*[=+\-@]/.test(str)) str = `'${str}`;
+        if (/[",\r\n]/.test(str)) {
           return '"' + str.replace(/"/g, '""') + '"';
         }
         return str;

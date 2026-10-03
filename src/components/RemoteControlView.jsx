@@ -24,6 +24,9 @@ export default function RemoteControlView({ credentials }) {
   const responseTimeoutRef = useRef(null);
   const armTimeoutRef = useRef(null);
   const requestInFlightRef = useRef(false);
+  const requestEpochRef = useRef(0);
+  const requestBaselineRef = useRef(null);
+  const requestObservedRef = useRef(false);
   const live = drawState?.live;
   const liveDrawingRef = useRef(false);
   liveDrawingRef.current = Boolean(live?.drawing);
@@ -46,25 +49,42 @@ export default function RemoteControlView({ credentials }) {
   );
 
   useEffect(() => {
+    const baseline = requestBaselineRef.current;
+    const resultArrived = baseline && (
+      live?.completedPrizeCount !== baseline.completedPrizeCount
+      || JSON.stringify(drawState?.lastAssignmentResult) !== baseline.assignment
+    );
     if (live?.drawing) {
+      requestObservedRef.current = true;
       clearTimeout(responseTimeoutRef.current);
       responseTimeoutRef.current = null;
-      requestInFlightRef.current = false;
       setArmed(false);
       setRequestStatus('drawing');
       setRequestMessage('The host accepted the request. Drawing now…');
-    } else if (requestStatus === 'drawing') {
+    } else if (requestStatus === 'drawing' || resultArrived) {
+      requestObservedRef.current = true;
+      requestBaselineRef.current = null;
+      clearTimeout(responseTimeoutRef.current);
+      responseTimeoutRef.current = null;
       setRequestStatus('idle');
       setRequestMessage('Reveal complete. Ready for the next draw.');
     }
-  }, [live?.drawing, requestStatus]);
+  }, [live?.drawing, live?.completedPrizeCount, drawState?.lastAssignmentResult, requestStatus]);
 
-  useEffect(() => () => {
-    clearTimeout(responseTimeoutRef.current);
-    clearTimeout(armTimeoutRef.current);
-    responseTimeoutRef.current = null;
-    armTimeoutRef.current = null;
-  }, []);
+  useEffect(() => {
+    setArmed(false);
+    setRequestStatus('idle');
+    setRequestMessage('');
+    requestInFlightRef.current = false;
+    requestBaselineRef.current = null;
+    return () => {
+      requestEpochRef.current += 1;
+      clearTimeout(responseTimeoutRef.current);
+      clearTimeout(armTimeoutRef.current);
+      responseTimeoutRef.current = null;
+      armTimeoutRef.current = null;
+    };
+  }, [credentials?.roomId, credentials?.remoteKey]);
 
   useEffect(() => {
     if (!canArm) setArmed(false);
@@ -101,6 +121,12 @@ export default function RemoteControlView({ credentials }) {
   const requestDraw = async () => {
     if (!canArm || !armed || requestInFlightRef.current) return;
     requestInFlightRef.current = true;
+    const requestEpoch = requestEpochRef.current;
+    requestObservedRef.current = false;
+    requestBaselineRef.current = {
+      completedPrizeCount: live.completedPrizeCount,
+      assignment: JSON.stringify(drawState?.lastAssignmentResult),
+    };
     setArmed(false);
     const commandId = createCommandId();
     if (!commandId) {
@@ -123,7 +149,9 @@ export default function RemoteControlView({ credentials }) {
     } catch (requestError) {
       error = requestError;
     }
+    if (requestEpoch !== requestEpochRef.current) return;
     requestInFlightRef.current = false;
+    if (requestObservedRef.current) return;
 
     if (error) {
       setRequestStatus('error');
@@ -160,7 +188,7 @@ export default function RemoteControlView({ credentials }) {
       : live?.currentPrize || 'Waiting for host';
   useEffect(() => {
     setArmed(false);
-  }, [currentPrize]);
+  }, [currentPrize, live?.completedPrizeCount]);
   const progressLabel = isStandardDraw && live?.prizeCount > 0
     ? `${live.completedPrizeCount} / ${live.prizeCount}`
     : isStandardDraw ? '—' : 'Assignment';
@@ -169,9 +197,11 @@ export default function RemoteControlView({ credentials }) {
   const actionHint = armed
     ? `Confirm to draw ${currentPrize}. This will start the host display.`
     : 'First tap arms the control. A second tap starts the draw.';
-  const actionMessage = requestMessage || syncError || (canArm
-    ? (armed ? `Armed for ${currentPrize}. Confirm within 10 seconds.` : 'Ready for the next draw.')
-    : status.label);
+  const actionMessage = syncError || (armed
+    ? `Armed for ${currentPrize}. Confirm within 10 seconds.`
+    : !canArm && requestStatus === 'idle'
+      ? status.label
+      : requestMessage || (canArm ? 'Ready for the next draw.' : status.label));
 
   return (
     <main className="mc-remote">

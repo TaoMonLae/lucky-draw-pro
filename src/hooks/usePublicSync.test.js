@@ -60,3 +60,29 @@ test('reconnects after an interrupted socket', async () => {
   unmount();
   jest.useRealTimers();
 });
+
+test('old room callbacks cannot replace the new room state', () => {
+  const { result, rerender } = renderHook(({ id }) => usePublicSync({ roomId: id }), { initialProps: { id: roomId } });
+  const old = sockets[0];
+  rerender({ id: '223e4567-e89b-42d3-a456-426614174000' });
+  act(() => {
+    sockets[1].open();
+    sockets[1].message({ type: 'state', revision: 1, snapshot: toPublicDrawState({ title: 'New room' }), hostOnline: true, hostSeen: Date.now() });
+    old.message({ type: 'closed' });
+    old.message({ type: 'state', revision: 9, snapshot: toPublicDrawState({ title: 'Old room' }), hostOnline: true, hostSeen: Date.now() });
+  });
+  expect(result.current.drawState.title).toBe('New room');
+  expect(result.current.syncStatus).toBe('live');
+});
+
+test('switching from a remote room to local clears the remote snapshot', () => {
+  localStorage.clear();
+  const { result, rerender } = renderHook(({ id }) => usePublicSync({ roomId: id }), { initialProps: { id: roomId } });
+  act(() => {
+    sockets[0].open();
+    sockets[0].message({ type: 'state', revision: 1, snapshot: toPublicDrawState({ title: 'Remote' }), hostOnline: true, hostSeen: Date.now() });
+  });
+  localStorage.setItem('lucky-draw-autosave', JSON.stringify({ initialEntries: ['Alice'], title: 'Local' }));
+  rerender({ id: '' });
+  expect(result.current.drawState.title).toBe('Local');
+});

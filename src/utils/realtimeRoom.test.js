@@ -95,6 +95,7 @@ describe('public realtime state', () => {
     expect(publicState.titleFont).toContain('Z20 Khit Haungg');
     expect(publicState.live).toEqual({
       drawing: true,
+      drawingWinnerIndex: 0,
       charging: false,
       chargeProgress: 0,
       currentPrize: 'Grand Prize',

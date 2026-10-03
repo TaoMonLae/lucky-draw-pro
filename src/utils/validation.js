@@ -1,4 +1,5 @@
 import { themes } from './themeConfig';
+import { MAX_ENTRIES } from './parseEntries';
 
 const VALID_OPERATION_MODES = ['standard', 'team-divider', 'role-selector'];
 const VALID_DRAW_MODES = ['numbers', 'names'];
@@ -19,18 +20,29 @@ const OPTIONAL_NUMERIC_RANGES = {
 export function isValidSessionData(data) {
   if (!data || typeof data !== 'object') return false;
   if (!Array.isArray(data.initialEntries)) return false;
-  if (!data.initialEntries.every((entry) => typeof entry === 'string')) return false;
+  if (data.initialEntries.length > MAX_ENTRIES) return false;
+  if (!data.initialEntries.every((entry) => typeof entry === 'string' && entry.trim())) return false;
+  const entryKey = (entry) => data.drawMode === 'numbers' && /^\d+$/.test(entry)
+    ? String(Number(entry)) : entry.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  if (new Set(data.initialEntries.map(entryKey)).size !== data.initialEntries.length) return false;
 
   if (data.remainingEntries !== undefined) {
     if (!Array.isArray(data.remainingEntries)) return false;
     if (!data.remainingEntries.every((entry) => typeof entry === 'string')) return false;
+    const initialSet = new Set(data.initialEntries);
+    if (!data.remainingEntries.every((entry) => initialSet.has(entry))) return false;
+    if (new Set(data.remainingEntries).size !== data.remainingEntries.length) return false;
   }
 
   if (data.prizes !== undefined) {
     if (!Array.isArray(data.prizes)) return false;
+    const prizeIds = new Set();
     for (const prize of data.prizes) {
       if (!prize || typeof prize !== 'object') return false;
       if (prize.id === undefined || typeof prize.name !== 'string') return false;
+      if (!(typeof prize.id === 'string' && prize.id.trim()) && !(typeof prize.id === 'number' && Number.isFinite(prize.id))) return false;
+      if (prizeIds.has(String(prize.id))) return false;
+      prizeIds.add(String(prize.id));
     }
   }
 
@@ -79,7 +91,7 @@ export function isValidSessionData(data) {
     return false;
   }
 
-  if (data.winnersPerPrize !== undefined && (!Number.isInteger(data.winnersPerPrize) || data.winnersPerPrize < 1)) {
+  if (data.winnersPerPrize !== undefined && (!Number.isSafeInteger(data.winnersPerPrize) || data.winnersPerPrize < 1 || data.winnersPerPrize > MAX_ENTRIES)) {
     return false;
   }
 

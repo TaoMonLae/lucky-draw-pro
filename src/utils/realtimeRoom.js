@@ -100,6 +100,7 @@ export function toPublicDrawState(appState) {
         : null,
     live: {
       drawing: Boolean(appState.drawing),
+      drawingWinnerIndex: Math.max(0, Math.min(70000, Math.floor(safeNumber(appState.drawingWinnerIndex, 0)))),
       charging: Boolean(appState.isCharging),
       chargeProgress: Math.max(0, Math.min(100, Math.round(safeNumber(appState.chargeProgress, 0)))),
       currentPrize: typeof appState.currentPrize === 'string' ? appState.currentPrize.slice(0, 200) : '',
@@ -146,7 +147,7 @@ export function isValidPublicDrawState(value) {
       if (!Array.isArray(entries) || entries.some((entry) => !entry || Object.keys(entry).some((key) => !keys.includes(key)))) return false;
     }
     if (!value.live || typeof value.live !== 'object') return false;
-    const allowedLive = new Set(['drawing', 'charging', 'chargeProgress', 'currentPrize', 'displayValue', 'lockedDigitCount', 'lockedDigits', 'grandFinalePhase', 'celebrationIndex', 'celebrationPlaying', 'showConfetti', 'remoteControlReady', 'completedPrizeCount', 'prizeCount', 'totalEntries', 'remainingEntriesCount']);
+    const allowedLive = new Set(['drawing', 'drawingWinnerIndex', 'charging', 'chargeProgress', 'currentPrize', 'displayValue', 'lockedDigitCount', 'lockedDigits', 'grandFinalePhase', 'celebrationIndex', 'celebrationPlaying', 'showConfetti', 'remoteControlReady', 'completedPrizeCount', 'prizeCount', 'totalEntries', 'remainingEntriesCount']);
     if (Object.keys(value.live).some((key) => !allowedLive.has(key))) return false;
   }
   if (typeof value.title !== 'string' || typeof value.subtitle !== 'string') return false;
@@ -158,6 +159,7 @@ export function isValidPublicDrawState(value) {
     if (typeof value.backgroundImage !== 'string') return false;
     if (!value.live || typeof value.live !== 'object') return false;
     if (typeof value.live.drawing !== 'boolean' || typeof value.live.showConfetti !== 'boolean') return false;
+    if (value.live.drawingWinnerIndex !== undefined && (!Number.isInteger(value.live.drawingWinnerIndex) || value.live.drawingWinnerIndex < 0 || value.live.drawingWinnerIndex > 70000)) return false;
     if (value.live.charging !== undefined && typeof value.live.charging !== 'boolean') return false;
     if (value.live.chargeProgress !== undefined && (!Number.isInteger(value.live.chargeProgress) || value.live.chargeProgress < 0 || value.live.chargeProgress > 100)) return false;
     if (value.live.lockedDigitCount !== undefined && (!Number.isInteger(value.live.lockedDigitCount) || value.live.lockedDigitCount < 0 || value.live.lockedDigitCount > 10)) return false;

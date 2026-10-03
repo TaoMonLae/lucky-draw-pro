@@ -15,6 +15,7 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
   const inFlightRef = useRef('');
   const queuedRef = useRef(false);
   const authorizedRef = useRef(false);
+  const supportsWinnerIndexRef = useRef(false);
   const publishRef = useRef(() => {});
   onDrawRef.current = onDraw;
   onUnavailableRef.current = onUnavailable;
@@ -22,10 +23,12 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
 
   publishRef.current = () => {
     const socket = socketRef.current;
-    if (!authorizedRef.current || socket?.readyState !== WebSocket.OPEN || queuedRef.current) return;
+    if (!enabled || !authorizedRef.current || socket?.readyState !== WebSocket.OPEN || queuedRef.current) return;
     let snapshot;
     try { snapshot = toPublicDrawState(stateRef.current); }
     catch (error) { setStatus('error'); setErrorMessage(error.message); return; }
+    // Keep frontend deployments compatible until the Worker upgrade is live.
+    if (!supportsWinnerIndexRef.current) delete snapshot.live.drawingWinnerIndex;
     const comparable = JSON.stringify({ ...snapshot, updatedAt: '' });
     if (comparable === sentRef.current) { setStatus('live'); return; }
     queuedRef.current = true;
@@ -65,14 +68,19 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
       roomRequest(roomId, 'snapshot').then(() => {
         if (stopped) return;
         socket = new WebSocket(roomSocketUrl(roomId));
+        const connection = socket;
+        const isCurrent = () => !stopped && socketRef.current === connection;
         socketRef.current = socket;
         authorizedRef.current = false;
         queuedRef.current = false;
-      socket.onopen = () => socket.send(JSON.stringify({ type: 'auth', key: writeKey }));
+      socket.onopen = () => { if (isCurrent()) connection.send(JSON.stringify({ type: 'auth', key: writeKey })); };
       socket.onmessage = (event) => {
+        if (!isCurrent()) return;
         let message;
         try { message = JSON.parse(event.data); } catch { return; }
+        if (!message || typeof message !== 'object') return;
         if (message.type === 'authorized') {
+          supportsWinnerIndexRef.current = message.capabilities?.includes('winner-index') === true;
           let localSnapshot;
           try { localSnapshot = toPublicDrawState(stateRef.current); }
           catch (error) { stopped = true; setStatus('error'); setListenerStatus('error'); setErrorMessage(error.message); socket.close(); return; }
@@ -105,7 +113,8 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
           sentRef.current = '';
           publishRef.current();
         } else if (message.type === 'draw-request') {
-          Promise.resolve(onDrawRef.current?.()).catch(() => {
+          Promise.resolve().then(() => { if (isCurrent()) return onDrawRef.current?.(); }).catch(() => {
+            if (!isCurrent()) return;
             setListenerStatus('error'); setErrorMessage('The requested draw could not start.');
           });
         } else if (message.type === 'error') {
@@ -123,8 +132,9 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
           unavailable();
         }
       };
-      socket.onerror = () => { setStatus('error'); setErrorMessage('Connection to the room service was interrupted.'); };
+      socket.onerror = () => { if (!isCurrent()) return; setStatus('error'); setErrorMessage('Connection to the room service was interrupted.'); };
       socket.onclose = () => {
+        if (!isCurrent()) return;
         clearInterval(heartbeatTimer);
         authorizedRef.current = false;
         queuedRef.current = false;
@@ -142,7 +152,11 @@ export function useRealtimePublisher({ roomId, writeKey, appState, enabled = tru
       stopped = true;
       clearTimeout(reconnectTimer); clearInterval(heartbeatTimer);
       socket?.close();
-      if (socketRef.current === socket) socketRef.current = null;
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+        authorizedRef.current = false;
+        queuedRef.current = false;
+      }
     };
   }, [enabled, roomId, writeKey]);
 

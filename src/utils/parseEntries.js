@@ -70,6 +70,7 @@ export function normalizeEntries(rawEntries = [], drawMode = 'numbers') {
   const uniqueEntries = [];
   const keyToEntry = new Map();
   const duplicateGroups = [];
+  const groupsByEntry = new Map();
   let blankCount = 0;
   const normalizedValues = rawEntries.map((entry) => collapseWhitespace(String(entry ?? '')));
   const numericWidth = drawMode === 'numbers'
@@ -94,11 +95,13 @@ export function normalizeEntries(rawEntries = [], drawMode = 'numbers') {
       return;
     }
 
-    const group = duplicateGroups.find((item) => item.kept === existing);
+    const group = groupsByEntry.get(existing);
     if (group) {
       group.removed.push(normalized);
     } else {
-      duplicateGroups.push({ kept: existing, removed: [normalized] });
+      const newGroup = { kept: existing, removed: [normalized] };
+      groupsByEntry.set(existing, newGroup);
+      duplicateGroups.push(newGroup);
     }
   });
 
